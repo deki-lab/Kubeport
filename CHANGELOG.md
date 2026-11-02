@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/deki-lab/k8s_forwarder/compare/v0.1.0...v0.2.0) (2026-11-02)
+
+
+### Features
+
+* auto-deactivate Forwards after an idle timeout ([2d8532b](https://github.com/deki-lab/k8s_forwarder/commit/2d8532b034cc37442ed6b26d1236738d28617eef))
+* English and French UI following the macOS language ([5a181ff](https://github.com/deki-lab/k8s_forwarder/commit/5a181ffb6a2b09fd8c36a94b9e894745ba2374ad))
+* Wi-Fi menu style panel ([#16](https://github.com/deki-lab/k8s_forwarder/issues/16)) ([3137932](https://github.com/deki-lab/k8s_forwarder/commit/313793209b449fc251ce96e50dd8abecadd11a04))
+
 ## 0.1.0 (2026-11-02)
 
 
