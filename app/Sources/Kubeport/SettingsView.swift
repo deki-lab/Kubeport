@@ -7,6 +7,7 @@ struct SettingsView: View {
 
     @State private var launchAtLogin = false
     @State private var kubeconfig = ""
+    @State private var defaultIdle: UInt32?
     @State private var error: String?
 
     var body: some View {
@@ -21,6 +22,23 @@ struct SettingsView: View {
                 Text(L("settings.needsApproval"))
                     .font(.caption).foregroundStyle(.secondary)
             }
+
+            Picker(L("settings.idleTimeout"), selection: Binding(
+                get: { defaultIdle },
+                set: { value in
+                    defaultIdle = value
+                    Task {
+                        do { try await model.setDefaultIdleTimeout(value) } catch { self.error = describe(error) }
+                    }
+                }
+            )) {
+                Text(L("idle.never")).tag(UInt32?.none)
+                ForEach(idleChoices, id: \.self) { minutes in
+                    Text(idleDuration(minutes)).tag(UInt32?.some(minutes))
+                }
+            }
+            Text(L("settings.idleTimeoutHint"))
+                .font(.caption).foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(L("settings.kubeconfig"))
@@ -42,6 +60,7 @@ struct SettingsView: View {
         .task {
             launchAtLogin = model.launchAtLogin
             kubeconfig = (try? await model.kubeconfig()) ?? nil ?? ""
+            defaultIdle = (try? await model.defaultIdleTimeout()) ?? nil
         }
     }
 

@@ -8,11 +8,12 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use kubeport_core::catalog::{self, TargetChoice};
 use kubeport_core::{
-    Config, ConfigError, Field, Forward, KubeEnv, Manager, ManagerError, RealState, Reason,
-    Statuses, Target, login_shell_env, session,
+    Config, ConfigError, Field, Forward, IdleTimeout, KubeEnv, Manager, ManagerError, RealState,
+    Reason, Statuses, Target, login_shell_env, session,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -114,6 +115,50 @@ pub enum Notice {
     CoreStartFailed {
         detail: String,
     },
+    /// Délai d'inactivité écoulé : `name` est passé Inactif.
+    IdleDeactivated {
+        name: String,
+        minutes: u32,
+    },
+}
+
+/// Délai d'inactivité choisi pour un Forward.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum IdleTimeoutView {
+    /// Suit le réglage par défaut.
+    Inherit,
+    Never,
+    Minutes {
+        minutes: u32,
+    },
+}
+
+impl From<IdleTimeout> for IdleTimeoutView {
+    fn from(idle: IdleTimeout) -> Self {
+        match idle {
+            IdleTimeout::Inherit => Self::Inherit,
+            IdleTimeout::Never => Self::Never,
+            IdleTimeout::After(d) => Self::Minutes {
+                minutes: minutes_of(d),
+            },
+        }
+    }
+}
+
+impl From<IdleTimeoutView> for IdleTimeout {
+    fn from(idle: IdleTimeoutView) -> Self {
+        match idle {
+            IdleTimeoutView::Inherit => Self::Inherit,
+            IdleTimeoutView::Never | IdleTimeoutView::Minutes { minutes: 0 } => Self::Never,
+            IdleTimeoutView::Minutes { minutes } => {
+                Self::After(Duration::from_secs(u64::from(minutes) * 60))
+            }
+        }
+    }
+}
+
+fn minutes_of(d: Duration) -> u32 {
+    u32::try_from(d.as_secs().div_ceil(60)).unwrap_or(u32::MAX)
 }
 
 /// Un Forward tel que l'interface l'affiche.
@@ -130,6 +175,11 @@ pub struct ForwardView {
     pub active: bool,
     /// État réel, présent seulement si le Forward est Actif.
     pub state: Option<RealStateView>,
+    /// Délai d'inactivité choisi pour ce Forward.
+    pub idle_timeout: IdleTimeoutView,
+    /// Échéance de désactivation automatique, en secondes Unix ; absente si une
+    /// connexion est ouverte ou sans délai.
+    pub idle_deadline_unix: Option<i64>,
 }
 
 /// Un Forward saisi dans le formulaire.
@@ -142,6 +192,7 @@ pub struct ForwardInput {
     pub target_name: String,
     pub remote_port: u16,
     pub local_port: u16,
+    pub idle_timeout: IdleTimeoutView,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -200,6 +251,8 @@ enum Command {
     Remove(String, Reply<()>),
     SetKubeconfig(Option<String>, Reply<()>),
     Kubeconfig(Reply<Option<String>>),
+    DefaultIdle(Reply<Option<u32>>),
+    SetDefaultIdle(Option<u32>, Reply<()>),
 }
 
 #[derive(uniffi::Object)]
@@ -304,6 +357,17 @@ impl Core {
     pub async fn kubeconfig(&self) -> Result<Option<String>, CoreError> {
         self.ask(Command::Kubeconfig).await
     }
+
+    /// Délai d'inactivité par défaut, en minutes ; `None` : jamais.
+    pub async fn default_idle_timeout(&self) -> Result<Option<u32>, CoreError> {
+        self.ask(Command::DefaultIdle).await
+    }
+
+    /// Change le Délai d'inactivité par défaut ; les Forwards Actifs concernés sont relancés.
+    pub async fn set_default_idle_timeout(&self, minutes: Option<u32>) -> Result<(), CoreError> {
+        self.ask(|reply| Command::SetDefaultIdle(minutes, reply))
+            .await
+    }
 }
 
 impl Core {
@@ -383,6 +447,9 @@ fn run(
 
     runtime.block_on(async move {
         let mut manager = Manager::new(config, env);
+        let mut expired = manager
+            .take_expired()
+            .expect("receveur d'expiration pris une seule fois");
         let mut statuses = manager.subscribe();
         for name in session::load_active(&session_path) {
             if manager.config().get(&name).is_some() {
@@ -403,6 +470,16 @@ fn run(
                     if changed.is_err() {
                         break;
                     }
+                }
+                Some(name) = expired.recv() => {
+                    let minutes = manager
+                        .config()
+                        .get(&name)
+                        .and_then(|f| manager.config().idle_timeout(f))
+                        .map(minutes_of)
+                        .unwrap_or_default();
+                    manager.deactivate(&name);
+                    listener.notice(Notice::IdleDeactivated { name, minutes });
                 }
             }
             // Une commande peut changer la config sans changer les statuts (rechargement) :
@@ -510,6 +587,14 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
                 .map(|p| p.to_string_lossy().into_owned());
             let _ = reply.send(Ok(current));
         }
+        Command::DefaultIdle(reply) => {
+            let _ = reply.send(Ok(manager.config().idle_timeout_minutes));
+        }
+        Command::SetDefaultIdle(minutes, reply) => {
+            let mut config = manager.config().clone();
+            config.idle_timeout_minutes = minutes.filter(|m| *m > 0);
+            let _ = reply.send(apply(manager, path, config).await);
+        }
     }
 }
 
@@ -529,6 +614,7 @@ async fn save(
         },
         remote_port: input.remote_port,
         local_port: input.local_port,
+        idle_timeout: input.idle_timeout.into(),
     };
     let was_active = previous.as_deref().is_some_and(|p| {
         manager
@@ -604,6 +690,12 @@ fn views(manager: &Manager, statuses: &Statuses) -> Vec<ForwardView> {
                 target_name,
                 remote_port: f.remote_port,
                 local_port: f.local_port,
+                idle_timeout: f.idle_timeout.into(),
+                idle_deadline_unix: status.idle_deadline.and_then(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .ok()
+                        .and_then(|d| i64::try_from(d.as_secs()).ok())
+                }),
                 active: status.active,
                 state: status.real.map(|r| match r {
                     RealState::Connected { pod } => RealStateView::Connected { pod },

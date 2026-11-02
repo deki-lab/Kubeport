@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
 use std::pin::pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::{Pod, Service};
@@ -13,6 +13,7 @@ use kube::{Api, Client};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 use crate::config::{Forward, Target};
@@ -20,6 +21,22 @@ use crate::resolve::{PortRef, Resolved, resolve, service_backend};
 use crate::state::{RealState, Reason};
 
 pub(crate) type Report = Arc<dyn Fn(RealState) + Send + Sync>;
+
+/// Délai d'inactivité d'un Forward Actif : passe Inactif après `timeout` sans connexion ouverte.
+pub(crate) struct Idle {
+    pub timeout: Option<Duration>,
+    /// Publie l'échéance en cours (`None` : une connexion est ouverte, ou pas de délai).
+    pub deadline: Arc<dyn Fn(Option<SystemTime>) + Send + Sync>,
+    /// Délai écoulé : le Manager passe le Forward Inactif.
+    pub expired: Arc<dyn Fn() + Send + Sync>,
+}
+
+impl Idle {
+    fn arm(&self, timeout: Duration) -> Instant {
+        (self.deadline)(Some(SystemTime::now() + timeout));
+        Instant::now() + timeout
+    }
+}
 
 /// Erreur classée : `Fatal` demande une action humaine, `Transient` se répare seule.
 enum Fault {
@@ -66,16 +83,17 @@ pub(crate) async fn run(
     forward: Forward,
     client: Client,
     report: Report,
+    idle: Idle,
     cancel: CancellationToken,
 ) {
     tokio::select! {
         biased;
         () = cancel.cancelled() => {}
-        () = serve(&forward, client, &report) => {}
+        () = serve(&forward, client, &report, &idle) => {}
     }
 }
 
-async fn serve(forward: &Forward, client: Client, report: &Report) {
+async fn serve(forward: &Forward, client: Client, report: &Report, idle: &Idle) {
     let listener = match TcpListener::bind((Ipv4Addr::LOCALHOST, forward.local_port)).await {
         Ok(l) => l,
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
@@ -117,7 +135,7 @@ async fn serve(forward: &Forward, client: Client, report: &Report) {
 
     tokio::select! {
         () = track_pods(pods.clone(), watch_config, port, missing, resolved_tx, report) => {}
-        () = accept_loop(listener, pods, resolved_rx, fatal_tx) => {}
+        () = accept_loop(listener, pods, resolved_rx, fatal_tx, idle) => {}
         Some(reason) = fatal_rx.recv() => report(RealState::Error(reason)),
     }
 }
@@ -227,17 +245,29 @@ async fn accept_loop(
     pods: Api<Pod>,
     resolved: watch::Receiver<Option<Resolved>>,
     fatal: mpsc::Sender<Reason>,
+    idle: &Idle,
 ) {
     // Abandonner le JoinSet coupe toutes les connexions quand le Forward s'arrête.
     let mut connections = JoinSet::new();
+    // Échéance de désactivation : armée tant qu'aucune connexion n'est ouverte.
+    let mut idle_at = idle.timeout.map(|t| idle.arm(t));
     loop {
+        // Le futur est créé même quand la branche est désactivée : jamais d'unwrap ici.
+        let far = Instant::now() + Duration::from_secs(365 * 24 * 3600);
         tokio::select! {
+            () = tokio::time::sleep_until(idle_at.unwrap_or(far)), if idle_at.is_some() => {
+                (idle.expired)();
+                return;
+            }
             accepted = listener.accept() => {
                 let Ok((socket, _)) = accepted else { continue };
                 let Some(target) = resolved.borrow().clone() else {
                     // Aucun pod Ready : on refuse la connexion plutôt que de la faire attendre.
                     continue;
                 };
+                if idle_at.take().is_some() {
+                    (idle.deadline)(None);
+                }
                 let pods = pods.clone();
                 let fatal = fatal.clone();
                 connections.spawn(async move {
@@ -251,7 +281,11 @@ async fn accept_loop(
                     }
                 });
             }
-            Some(_) = connections.join_next(), if !connections.is_empty() => {}
+            Some(_) = connections.join_next(), if !connections.is_empty() => {
+                if connections.is_empty() {
+                    idle_at = idle.timeout.map(|t| idle.arm(t));
+                }
+            }
         }
     }
 }

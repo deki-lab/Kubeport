@@ -80,6 +80,7 @@ async fn up(config: Config, kubeconfig: Option<PathBuf>, names: Vec<String>) -> 
         exec_path: None,
     };
     let mut manager = Manager::new(config, env);
+    let mut expired = manager.take_expired().expect("expiry receiver taken once");
     let mut statuses = manager.subscribe();
 
     for name in &names {
@@ -101,6 +102,10 @@ async fn up(config: Config, kubeconfig: Option<PathBuf>, names: Vec<String>) -> 
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => break,
+            Some(name) = expired.recv() => {
+                manager.deactivate(&name);
+                println!("{name:<24} deactivated: idle timeout reached");
+            }
             changed = statuses.changed() => {
                 if changed.is_err() {
                     break;

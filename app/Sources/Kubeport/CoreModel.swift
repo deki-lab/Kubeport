@@ -88,6 +88,12 @@ final class CoreModel {
 
     func kubeconfig() async throws -> String? { try await requireCore().kubeconfig() }
 
+    func defaultIdleTimeout() async throws -> UInt32? { try await requireCore().defaultIdleTimeout() }
+
+    func setDefaultIdleTimeout(_ minutes: UInt32?) async throws {
+        try await requireCore().setDefaultIdleTimeout(minutes: minutes)
+    }
+
     func setKubeconfig(_ path: String?) async throws {
         try await requireCore().setKubeconfig(path: path)
     }

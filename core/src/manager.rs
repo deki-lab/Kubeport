@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use kube::{Client, Config as KubeConfig};
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -47,18 +47,30 @@ pub struct Manager {
     clients: HashMap<String, Client>,
     running: HashMap<String, (CancellationToken, JoinHandle<()>)>,
     status: watch::Sender<Statuses>,
+    expired_tx: mpsc::UnboundedSender<String>,
+    expired_rx: Option<mpsc::UnboundedReceiver<String>>,
 }
 
 impl Manager {
     pub fn new(config: Config, env: KubeEnv) -> Self {
         let statuses = initial_statuses(&config);
+        let (expired_tx, expired_rx) = mpsc::unbounded_channel();
         Self {
             config,
             env,
             clients: HashMap::new(),
             running: HashMap::new(),
             status: watch::channel(statuses).0,
+            expired_tx,
+            expired_rx: Some(expired_rx),
         }
+    }
+
+    /// Noms des Forwards dont le Délai d'inactivité vient d'expirer. Celui qui pilote le
+    /// Manager les reçoit et appelle `deactivate` : le Manager ne se désactive pas seul,
+    /// pour que l'interface puisse prévenir l'utilisateur. Disponible une seule fois.
+    pub fn take_expired(&mut self) -> Option<mpsc::UnboundedReceiver<String>> {
+        self.expired_rx.take()
     }
 
     pub fn config(&self) -> &Config {
@@ -97,9 +109,10 @@ impl Manager {
         let token = CancellationToken::new();
         let report = self.reporter(name, token.clone());
         report(RealState::Reconnecting(Reason::ConnectingToCluster));
+        let idle = self.idle(name, &forward, token.clone());
 
         let task = match self.client(&forward.context).await {
-            Ok(client) => tokio::spawn(forward::run(forward, client, report, token.clone())),
+            Ok(client) => tokio::spawn(forward::run(forward, client, report, idle, token.clone())),
             Err(reason) => {
                 report(RealState::Error(reason));
                 tokio::spawn(async {})
@@ -171,7 +184,7 @@ impl Manager {
             let Some(status) = statuses.get_mut(name) else {
                 return false;
             };
-            let changed = status.active || status.real.is_some();
+            let changed = *status != ForwardStatus::default();
             *status = ForwardStatus::default();
             changed
         });
@@ -188,15 +201,45 @@ impl Manager {
                     return false;
                 }
                 let entry = statuses.entry(name.clone()).or_default();
-                let next = ForwardStatus {
-                    active: true,
-                    real: Some(real),
-                };
-                let changed = *entry != next;
-                *entry = next;
+                let changed = !entry.active || entry.real.as_ref() != Some(&real);
+                entry.active = true;
+                entry.real = Some(real);
                 changed
             });
         })
+    }
+
+    /// Branche le Délai d'inactivité d'un Forward sur les statuts et sur `take_expired`.
+    fn idle(
+        &self,
+        name: &str,
+        forward: &crate::config::Forward,
+        token: CancellationToken,
+    ) -> forward::Idle {
+        let status = self.status.clone();
+        let deadline_name = name.to_owned();
+        let deadline_token = token.clone();
+        let expired_tx = self.expired_tx.clone();
+        let expired_name = name.to_owned();
+        forward::Idle {
+            timeout: self.config.idle_timeout(forward),
+            deadline: Arc::new(move |deadline| {
+                status.send_if_modified(|statuses| {
+                    if deadline_token.is_cancelled() {
+                        return false;
+                    }
+                    let entry = statuses.entry(deadline_name.clone()).or_default();
+                    let changed = entry.idle_deadline != deadline;
+                    entry.idle_deadline = deadline;
+                    changed
+                });
+            }),
+            expired: Arc::new(move || {
+                if !token.is_cancelled() {
+                    let _ = expired_tx.send(expired_name.clone());
+                }
+            }),
+        }
     }
 
     /// Noms des Contextes du kubeconfig, triés.
@@ -437,5 +480,72 @@ mod lifecycle_tests {
         let rivals = m.activate("prod").await.unwrap();
         assert_eq!(rivals, ["staging"]);
         assert_eq!(active(&m), ["prod"]);
+    }
+}
+
+#[cfg(test)]
+mod idle_tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::config::{Forward, IdleTimeout, Target};
+
+    /// Avec docker-desktop et tests/fixtures/whoami.yaml appliqué :
+    /// `cargo test -p kubeport-core -- --ignored`
+    #[tokio::test(flavor = "current_thread")]
+    #[ignore]
+    async fn delai_d_inactivite_sur_docker_desktop() {
+        let forward = Forward {
+            name: "idle".into(),
+            context: "docker-desktop".into(),
+            namespace: "kubeport-it".into(),
+            target: Target::Service("whoami".into()),
+            remote_port: 8080,
+            local_port: 28090,
+            idle_timeout: IdleTimeout::After(Duration::from_secs(2)),
+        };
+        let config = Config {
+            forwards: vec![forward],
+            ..Default::default()
+        };
+        let mut m = Manager::new(config, KubeEnv::default());
+        let mut expired = m.take_expired().unwrap();
+        let mut statuses = m.subscribe();
+        m.activate("idle").await.unwrap();
+
+        let connected = |s: &Statuses| matches!(s["idle"].real, Some(RealState::Connected { .. }));
+        tokio::time::timeout(Duration::from_secs(20), statuses.wait_for(connected))
+            .await
+            .expect("Connecté")
+            .unwrap();
+        assert!(
+            m.subscribe().borrow()["idle"].idle_deadline.is_some(),
+            "échéance armée"
+        );
+
+        // Une connexion ouverte suspend le délai, même bien au-delà de 2 s.
+        let socket = tokio::net::TcpStream::connect(("127.0.0.1", 28090))
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(
+            m.subscribe().borrow()["idle"].idle_deadline.is_none(),
+            "échéance suspendue"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_secs(3), expired.recv())
+                .await
+                .is_err(),
+            "pas d'expiration pendant une connexion"
+        );
+
+        drop(socket);
+        let name = tokio::time::timeout(Duration::from_secs(10), expired.recv())
+            .await
+            .expect("expiration après fermeture")
+            .unwrap();
+        assert_eq!(name, "idle");
+        m.deactivate(&name);
+        assert!(!m.subscribe().borrow()["idle"].active);
     }
 }
