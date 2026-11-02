@@ -92,8 +92,10 @@ struct SettingsView: View {
                 Button(L("footer.quit"), action: model.quit).keyboardShortcut("q")
             }
             .controlSize(.small)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            // Keep clear of the panel's rounded bottom corners.
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
         }
         .task {
             launchAtLogin = model.launchAtLogin
