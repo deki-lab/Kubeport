@@ -1,18 +1,16 @@
-//! Drives the Forwards: Desired state, Competing Forwards, one client per Context.
+//! Drives the Forwards: Desired state, Competing Forwards, one `Cluster` per Context.
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use kube::config::{KubeConfigOptions, Kubeconfig};
-use kube::{Client, Config as KubeConfig};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use crate::cluster::Connector;
+use crate::cluster::kube::{KubeConnector, KubeEnv};
 use crate::config::Config;
 use crate::forward;
-use crate::shell_env::ShellEnv;
 use crate::state::{ForwardStatus, RealState, Reason};
 
 pub type Statuses = BTreeMap<String, ForwardStatus>;
@@ -23,28 +21,9 @@ pub enum ManagerError {
     UnknownForward(String),
 }
 
-/// Where to read the kubeconfig from and which `PATH` to run `exec` auth plugins with.
-#[derive(Debug, Default, Clone)]
-pub struct KubeEnv {
-    /// Kubeconfig files to merge; empty: the process `KUBECONFIG`, then `~/.kube/config`.
-    pub kubeconfig: Vec<PathBuf>,
-    /// `PATH` injected into `exec` plugins that do not declare one.
-    pub exec_path: Option<String>,
-}
-
-impl From<ShellEnv> for KubeEnv {
-    fn from(env: ShellEnv) -> Self {
-        Self {
-            kubeconfig: env.kubeconfig,
-            exec_path: env.path,
-        }
-    }
-}
-
-pub struct Manager {
+pub struct Manager<C: Connector = KubeConnector> {
     config: Config,
-    env: KubeEnv,
-    clients: HashMap<String, Client>,
+    connector: C,
     running: HashMap<String, (CancellationToken, JoinHandle<()>)>,
     status: watch::Sender<Statuses>,
     expired_tx: mpsc::UnboundedSender<String>,
@@ -53,12 +32,23 @@ pub struct Manager {
 
 impl Manager {
     pub fn new(config: Config, env: KubeEnv) -> Self {
+        Self::with_connector(config, KubeConnector::new(env))
+    }
+
+    /// Cached kube-rs client for the Context; for the form's one-off listings.
+    pub async fn client(&mut self, context: &str) -> Result<kube::Client, Reason> {
+        let kubeconfig = self.config.kubeconfig.clone();
+        self.connector.client(kubeconfig.as_deref(), context).await
+    }
+}
+
+impl<C: Connector> Manager<C> {
+    pub fn with_connector(config: Config, connector: C) -> Self {
         let statuses = initial_statuses(&config);
         let (expired_tx, expired_rx) = mpsc::unbounded_channel();
         Self {
             config,
-            env,
-            clients: HashMap::new(),
+            connector,
             running: HashMap::new(),
             status: watch::channel(statuses).0,
             expired_tx,
@@ -111,8 +101,15 @@ impl Manager {
         report(RealState::Reconnecting(Reason::ConnectingToCluster));
         let idle = self.idle(name, &forward, token.clone());
 
-        let task = match self.client(&forward.context).await {
-            Ok(client) => tokio::spawn(forward::run(forward, client, report, idle, token.clone())),
+        let kubeconfig = self.config.kubeconfig.clone();
+        let task = match self
+            .connector
+            .cluster(kubeconfig.as_deref(), &forward.context)
+            .await
+        {
+            Ok(cluster) => {
+                tokio::spawn(forward::run(forward, cluster, report, idle, token.clone()))
+            }
             Err(reason) => {
                 report(RealState::Error(reason));
                 tokio::spawn(async {})
@@ -137,7 +134,7 @@ impl Manager {
     /// Restarts every Active Forward with fresh clients (wake-up, network change).
     pub async fn reconnect_all(&mut self) {
         let names = self.stop_all().await;
-        self.clients.clear();
+        self.connector.forget();
         for name in names {
             let _ = self.activate(&name).await;
         }
@@ -169,7 +166,7 @@ impl Manager {
             }
         }
         if new_kubeconfig {
-            self.clients.clear();
+            self.connector.forget();
         }
         self.status.send_modify(|statuses| {
             statuses.retain(|name, _| config.get(name).is_some());
@@ -273,64 +270,7 @@ impl Manager {
 
     /// Names of the kubeconfig Contexts, sorted.
     pub fn contexts(&self) -> Result<Vec<String>, Reason> {
-        let mut names: Vec<String> = self
-            .read_kubeconfig()?
-            .contexts
-            .into_iter()
-            .map(|c| c.name)
-            .collect();
-        names.sort();
-        Ok(names)
-    }
-
-    /// Cached client for the Context; for the form's one-off calls.
-    pub async fn client(&mut self, context: &str) -> Result<Client, Reason> {
-        if let Some(client) = self.clients.get(context) {
-            return Ok(client.clone());
-        }
-        let mut kubeconfig = self.read_kubeconfig()?;
-        if !kubeconfig.contexts.iter().any(|c| c.name == context) {
-            return Err(Reason::ContextMissing {
-                context: context.to_owned(),
-            });
-        }
-        if let Some(path) = &self.env.exec_path {
-            inject_exec_path(&mut kubeconfig, path);
-        }
-        let options = KubeConfigOptions {
-            context: Some(context.to_owned()),
-            ..Default::default()
-        };
-        let config = KubeConfig::from_custom_kubeconfig(kubeconfig, &options)
-            .await
-            .map_err(|e| Reason::Kubeconfig {
-                detail: format!("{context}: {e}"),
-            })?;
-        let client = Client::try_from(config).map_err(|e| Reason::Kubeconfig {
-            detail: format!("{context}: {e}"),
-        })?;
-        self.clients.insert(context.to_owned(), client.clone());
-        Ok(client)
-    }
-
-    /// Priority order: the config's `kubeconfig` setting, the login shell's `KUBECONFIG`,
-    /// then standard behaviour (the process `KUBECONFIG`, `~/.kube/config`).
-    fn read_kubeconfig(&self) -> Result<Kubeconfig, Reason> {
-        let paths: Vec<PathBuf> = match &self.config.kubeconfig {
-            Some(path) => vec![path.clone()],
-            None => self.env.kubeconfig.clone(),
-        };
-        let result = if paths.is_empty() {
-            Kubeconfig::read()
-        } else {
-            paths
-                .iter()
-                .map(Kubeconfig::read_from)
-                .try_fold(Kubeconfig::default(), |acc, next| acc.merge(next?))
-        };
-        result.map_err(|e| Reason::Kubeconfig {
-            detail: e.to_string(),
-        })
+        self.connector.contexts(self.config.kubeconfig.as_deref())
     }
 }
 
@@ -342,84 +282,11 @@ fn initial_statuses(config: &Config) -> Statuses {
         .collect()
 }
 
-/// Gives `exec` plugins (aws, gke-gcloud-auth-plugin…) the login shell's `PATH`,
-/// unless they already declare one. `Command` then looks up the binary in that `PATH`.
-fn inject_exec_path(kubeconfig: &mut Kubeconfig, path: &str) {
-    for exec in kubeconfig
-        .auth_infos
-        .iter_mut()
-        .filter_map(|a| a.auth_info.as_mut()?.exec.as_mut())
-    {
-        let env = exec.env.get_or_insert_default();
-        if !env
-            .iter()
-            .any(|e| e.get("name").map(String::as_str) == Some("PATH"))
-        {
-            env.push(HashMap::from([
-                ("name".to_owned(), "PATH".to_owned()),
-                ("value".to_owned(), path.to_owned()),
-            ]));
-        }
-    }
-}
-
-impl Drop for Manager {
+impl<C: Connector> Drop for Manager<C> {
     fn drop(&mut self) {
         for (token, _) in self.running.values() {
             token.cancel();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn injects_path_only_into_exec_plugins_without_one() {
-        let mut kc = Kubeconfig::from_yaml(
-            r#"
-apiVersion: v1
-kind: Config
-users:
-  - name: eks
-    user:
-      exec:
-        apiVersion: client.authentication.k8s.io/v1beta1
-        command: aws
-  - name: already
-    user:
-      exec:
-        apiVersion: client.authentication.k8s.io/v1beta1
-        command: kubelogin
-        env:
-          - name: PATH
-            value: /custom
-  - name: token
-    user:
-      token: abc
-"#,
-        )
-        .unwrap();
-        inject_exec_path(&mut kc, "/opt/homebrew/bin:/usr/bin");
-        let path_of = |i: usize| {
-            kc.auth_infos[i]
-                .auth_info
-                .as_ref()
-                .unwrap()
-                .exec
-                .as_ref()
-                .unwrap()
-                .env
-                .as_ref()
-                .unwrap()
-                .iter()
-                .find(|e| e["name"] == "PATH")
-                .map(|e| e["value"].clone())
-        };
-        assert_eq!(path_of(0).as_deref(), Some("/opt/homebrew/bin:/usr/bin"));
-        assert_eq!(path_of(1).as_deref(), Some("/custom"));
-        assert!(kc.auth_infos[2].auth_info.as_ref().unwrap().exec.is_none());
     }
 }
 
@@ -576,5 +443,235 @@ mod idle_tests {
         assert_eq!(name, "idle");
         m.deactivate(&name);
         assert!(!m.subscribe().borrow()["idle"].active);
+    }
+}
+
+/// The Forward runtime through the Manager's interface, against the in-memory cluster:
+/// no cluster, no network beyond 127.0.0.1.
+#[cfg(test)]
+mod runtime_tests {
+    use std::time::Duration;
+
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::TcpStream;
+
+    use super::*;
+    use crate::cluster::Fault;
+    use crate::cluster::memory::{MemoryCluster, MemoryConnector, pod, service};
+    use crate::config::{Forward, IdleTimeout, Target};
+
+    fn free_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    fn forward(target: Target, idle: IdleTimeout) -> Forward {
+        Forward {
+            name: "f".into(),
+            context: "c".into(),
+            namespace: "n".into(),
+            target,
+            remote_port: 80,
+            local_port: free_port(),
+            idle_timeout: idle,
+        }
+    }
+
+    fn manager(forward: Forward) -> (Manager<MemoryConnector>, MemoryCluster, u16) {
+        let cluster = MemoryCluster::new();
+        let mut connector = MemoryConnector::default();
+        connector.clusters.insert("c".into(), cluster.clone());
+        let port = forward.local_port;
+        let config = Config {
+            forwards: vec![forward],
+            ..Default::default()
+        };
+        (Manager::with_connector(config, connector), cluster, port)
+    }
+
+    async fn wait(
+        m: &Manager<MemoryConnector>,
+        what: &str,
+        ok: impl Fn(&Option<RealState>) -> bool,
+    ) {
+        let mut statuses = m.subscribe();
+        let found = tokio::time::timeout(
+            Duration::from_secs(5),
+            statuses.wait_for(|s| ok(&s.get("f").and_then(|f| f.real.clone()))),
+        )
+        .await;
+        assert!(
+            found.is_ok(),
+            "{what}: still {:?}",
+            m.subscribe().borrow().get("f")
+        );
+    }
+
+    fn connected_to(pod: &'static str) -> impl Fn(&Option<RealState>) -> bool {
+        move |s| matches!(s, Some(RealState::Connected { pod: p }) if p == pod)
+    }
+
+    /// Opens a local connection and reads which pod served it.
+    async fn open(port: u16) -> (String, BufReader<TcpStream>) {
+        let mut stream = BufReader::new(TcpStream::connect(("127.0.0.1", port)).await.unwrap());
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(5), stream.read_line(&mut line))
+            .await
+            .expect("pod answers")
+            .unwrap();
+        (line.trim().to_owned(), stream)
+    }
+
+    fn terminating(mut p: k8s_openapi::api::core::v1::Pod) -> k8s_openapi::api::core::v1::Pod {
+        p.metadata.deletion_timestamp = p.metadata.creation_timestamp.clone();
+        p
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn rollout_moves_new_connections_and_keeps_open_ones() {
+        let (mut m, cluster, port) =
+            manager(forward(Target::Service("web".into()), IdleTimeout::Never));
+        cluster.set_service("n", service("web", "web"));
+        cluster.apply_pod("n", pod("old", "web", 100, true));
+        cluster.apply_pod("n", pod("young", "web", 200, true));
+        m.activate("f").await.unwrap();
+        wait(&m, "oldest Ready pod", connected_to("old")).await;
+
+        let (served, mut kept) = open(port).await;
+        assert_eq!(served, "old");
+
+        // Rollout: the Resolved pod starts terminating.
+        cluster.apply_pod("n", terminating(pod("old", "web", 100, true)));
+        wait(&m, "switch to the other pod", connected_to("young")).await;
+        assert_eq!(open(port).await.0, "young");
+
+        // The connection opened before the switch still talks to its pod.
+        kept.get_mut().write_all(b"ping").await.unwrap();
+        let mut echo = [0u8; 4];
+        kept.read_exact(&mut echo).await.unwrap();
+        assert_eq!(&echo, b"ping");
+        assert_eq!(cluster.connections(), ["old", "young"]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn no_ready_pod_reconnects_until_one_shows_up() {
+        let (mut m, cluster, _) =
+            manager(forward(Target::Service("web".into()), IdleTimeout::Never));
+        cluster.set_service("n", service("web", "web"));
+        cluster.apply_pod("n", pod("starting", "web", 100, false));
+        m.activate("f").await.unwrap();
+        wait(&m, "no Ready pod", |s| {
+            matches!(s, Some(RealState::Reconnecting(Reason::NoReadyPod)))
+        })
+        .await;
+        cluster.apply_pod("n", pod("starting", "web", 100, true));
+        wait(&m, "pod became Ready", connected_to("starting")).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn missing_or_podless_services_are_errors() {
+        let (mut m, _, _) = manager(forward(Target::Service("ghost".into()), IdleTimeout::Never));
+        m.activate("f").await.unwrap();
+        wait(&m, "Service not found", |s| {
+            matches!(s, Some(RealState::Error(Reason::ServiceNotFound { service, .. })) if service == "ghost")
+        })
+        .await;
+
+        let (mut m, cluster, _) =
+            manager(forward(Target::Service("ext".into()), IdleTimeout::Never));
+        let mut ext = service("ext", "x");
+        ext.spec.as_mut().unwrap().type_ = Some("ExternalName".into());
+        cluster.set_service("n", ext);
+        m.activate("f").await.unwrap();
+        wait(&m, "ExternalName", |s| {
+            matches!(s, Some(RealState::Error(Reason::ExternalNameService)))
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_dropped_watch_reconnects_then_recovers() {
+        let (mut m, cluster, _) =
+            manager(forward(Target::Service("web".into()), IdleTimeout::Never));
+        cluster.set_service("n", service("web", "web"));
+        cluster.apply_pod("n", pod("a", "web", 100, true));
+        m.activate("f").await.unwrap();
+        wait(&m, "connected", connected_to("a")).await;
+        cluster.fail_watch(
+            "n",
+            Fault::Transient(Reason::ApiUnreachable {
+                detail: "eof".into(),
+            }),
+        );
+        wait(&m, "watch dropped", |s| {
+            matches!(
+                s,
+                Some(RealState::Reconnecting(Reason::ApiUnreachable { .. }))
+            )
+        })
+        .await;
+        cluster.apply_pod("n", pod("a", "web", 100, true));
+        wait(&m, "back", connected_to("a")).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_refused_port_forward_is_an_error() {
+        let (mut m, cluster, port) =
+            manager(forward(Target::Service("web".into()), IdleTimeout::Never));
+        cluster.set_service("n", service("web", "web"));
+        cluster.apply_pod("n", pod("a", "web", 100, true));
+        m.activate("f").await.unwrap();
+        wait(&m, "connected", connected_to("a")).await;
+        cluster.fail_next_connect(Fault::Fatal(Reason::AccessDenied {
+            detail: "pods/portforward".into(),
+        }));
+        let _socket = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        wait(&m, "access denied", |s| {
+            matches!(s, Some(RealState::Error(Reason::AccessDenied { .. })))
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn idle_timeout_waits_for_the_last_connection_to_close() {
+        let idle = IdleTimeout::After(Duration::from_millis(300));
+        let (mut m, cluster, port) = manager(forward(Target::Service("web".into()), idle));
+        cluster.set_service("n", service("web", "web"));
+        cluster.apply_pod("n", pod("a", "web", 100, true));
+        let mut expired = m.take_expired().unwrap();
+        m.activate("f").await.unwrap();
+        wait(&m, "connected", connected_to("a")).await;
+
+        let (_, socket) = open(port).await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(800), expired.recv())
+                .await
+                .is_err(),
+            "no expiry while a connection is open"
+        );
+        drop(socket);
+        let name = tokio::time::timeout(Duration::from_secs(3), expired.recv())
+            .await
+            .expect("expiry after the connection closed")
+            .unwrap();
+        assert_eq!(name, "f");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_named_pod_comes_back_under_the_same_name() {
+        let (mut m, cluster, _) = manager(forward(Target::Pod("db-0".into()), IdleTimeout::Never));
+        cluster.apply_pod("n", pod("db-0", "db", 100, true));
+        m.activate("f").await.unwrap();
+        wait(&m, "connected", connected_to("db-0")).await;
+        cluster.delete_pod("n", "db-0");
+        wait(&m, "pod gone", |s| {
+            matches!(s, Some(RealState::Reconnecting(Reason::PodNotReady { .. })))
+        })
+        .await;
+        cluster.apply_pod("n", pod("db-0", "db", 300, true));
+        wait(&m, "pod back", connected_to("db-0")).await;
     }
 }
