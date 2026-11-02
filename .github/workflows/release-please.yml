@@ -44,14 +44,14 @@ jobs:
   homebrew-tap:
     needs: [release-please, build-dmg]
     # Activé quand le dépôt est public : variable de dépôt HOMEBREW_TAP_ENABLED=true
-    # et secret HOMEBREW_TAP_TOKEN (PAT fine-grained, contents:write sur lideke/homebrew-tap).
+    # et secret HOMEBREW_TAP_TOKEN (PAT fine-grained, contents:write sur deki-lab/homebrew-tap).
     if: vars.HOMEBREW_TAP_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: lideke/homebrew-tap
+          repository: deki-lab/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
       - run: |

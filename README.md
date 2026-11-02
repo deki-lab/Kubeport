@@ -8,7 +8,7 @@ Port-forwards Kubernetes depuis la barre de menu macOS. On configure un Forward 
 ## Installation
 
 ```sh
-brew install --cask lideke/tap/kubeport
+brew install --cask deki-lab/tap/kubeport
 ```
 
 L'app n'est pas encore signée par un Developer ID Apple ni notarisée. Au premier lancement, macOS la bloque :
