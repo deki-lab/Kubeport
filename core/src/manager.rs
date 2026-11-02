@@ -199,7 +199,20 @@ impl Manager {
         })
     }
 
-    async fn client(&mut self, context: &str) -> Result<Client, String> {
+    /// Noms des Contextes du kubeconfig, triés.
+    pub fn contexts(&self) -> Result<Vec<String>, String> {
+        let mut names: Vec<String> = self
+            .read_kubeconfig()?
+            .contexts
+            .into_iter()
+            .map(|c| c.name)
+            .collect();
+        names.sort();
+        Ok(names)
+    }
+
+    /// Client du Contexte, mis en cache ; pour les appels ponctuels du formulaire.
+    pub async fn client(&mut self, context: &str) -> Result<Client, String> {
         if let Some(client) = self.clients.get(context) {
             return Ok(client.clone());
         }

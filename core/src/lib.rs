@@ -2,10 +2,12 @@
 //!
 //! Vocabulaire : voir `GLOSSARY.md`. Décisions : voir `docs/adr/`.
 
+pub mod catalog;
 pub mod config;
 mod forward;
 pub mod manager;
 pub mod resolve;
+pub mod session;
 pub mod shell_env;
 pub mod state;
 

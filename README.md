@@ -19,12 +19,23 @@ L'app n'est pas encore signée par un Developer ID Apple ni notarisée. Au premi
 
 Prérequis : macOS 14 ou plus récent, Mac Apple Silicon.
 
+## Utilisation
+
+- **Nouveau Forward** : Contexte, namespace, Service ou Pod et ports sont proposés depuis le cluster.
+- Clic droit sur un Forward : **Modifier** (un Forward Actif est relancé) ou **Dupliquer**.
+- **Réglages** (roue dentée) : lancement à l'ouverture de session, kubeconfig forcé.
+- Les Forwards Actifs à la fermeture sont réactivés au lancement suivant.
+- Fichiers, dans `~/Library/Application Support/k8s_forwarder/` :
+  - `config.toml` : les Forwards, éditable à la main (bouton **Recharger** ensuite). L'app réécrit le fichier quand on l'édite depuis l'interface : les commentaires ajoutés à la main sont perdus.
+  - `state.toml` : Forwards Actifs, géré par l'app.
+
 ## Développement
 
 Prérequis : Rust stable, Xcode (pour `xcodebuild -create-xcframework`).
 
 ```sh
-cargo test --all                 # cœur Rust
+cargo test --all                 # cœur Rust et pont FFI
+cargo test -p kubeport-ffi -- --ignored   # formulaire sur docker-desktop
 cargo run -p kubeport-cli        # CLI de développement
 ./scripts/build-ffi.sh           # cœur Rust → app/KubeportFFI.xcframework + bindings Swift
 ./scripts/build-app.sh           # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg

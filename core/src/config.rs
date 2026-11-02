@@ -56,6 +56,21 @@ pub enum ConfigError {
     Serialize(#[from] toml::ser::Error),
     #[error("deux Forwards portent le nom « {0} »")]
     DuplicateName(String),
+    #[error("{0}")]
+    Invalid(String),
+}
+
+/// En-tête écrit en tête du fichier quand l'app l'enregistre.
+const HEADER: &str = "# Forwards Kubeport : modifiables ici ou depuis l'app (Recharger après une édition).\n# Un bloc [[forward]] par port-forward ; `service` ou `pod`, pas les deux.\n\n";
+
+/// Écrit dans un fichier temporaire puis renomme : jamais de fichier à moitié écrit.
+pub(crate) fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("toml.tmp");
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(tmp, path)
 }
 
 impl Config {
@@ -94,6 +109,37 @@ impl Config {
         Ok(toml::to_string_pretty(self)?)
     }
 
+    pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
+        let text = format!("{HEADER}{}", self.to_toml()?);
+        write_atomic(path, &text).map_err(|source| ConfigError::Io {
+            path: path.to_owned(),
+            source,
+        })
+    }
+
+    /// Ajoute un Forward, ou remplace celui nommé `previous` (qui peut être renommé).
+    pub fn upsert(&mut self, previous: Option<&str>, forward: Forward) -> Result<(), ConfigError> {
+        validate(&forward)?;
+        let index = previous.and_then(|p| self.forwards.iter().position(|f| f.name == p));
+        let clash = self
+            .forwards
+            .iter()
+            .enumerate()
+            .any(|(i, f)| f.name == forward.name && Some(i) != index);
+        if clash {
+            return Err(ConfigError::DuplicateName(forward.name));
+        }
+        match index {
+            Some(i) => self.forwards[i] = forward,
+            None => self.forwards.push(forward),
+        }
+        Ok(())
+    }
+
+    pub fn remove(&mut self, name: &str) {
+        self.forwards.retain(|f| f.name != name);
+    }
+
     pub fn get(&self, name: &str) -> Option<&Forward> {
         self.forwards.iter().find(|f| f.name == name)
     }
@@ -108,6 +154,27 @@ impl Config {
             .filter(|f| f.name != name && f.local_port == forward.local_port)
             .collect()
     }
+}
+
+fn validate(forward: &Forward) -> Result<(), ConfigError> {
+    let target = match &forward.target {
+        Target::Service(n) | Target::Pod(n) => n,
+    };
+    let missing = [
+        ("nom", &forward.name),
+        ("contexte", &forward.context),
+        ("namespace", &forward.namespace),
+        ("cible", target),
+    ]
+    .into_iter()
+    .find(|(_, v)| v.trim().is_empty());
+    if let Some((field, _)) = missing {
+        return Err(ConfigError::Invalid(format!("{field} manquant")));
+    }
+    if forward.remote_port == 0 || forward.local_port == 0 {
+        return Err(ConfigError::Invalid("le port 0 est interdit".into()));
+    }
+    Ok(())
 }
 
 /// Forme TOML d'un Forward : `service` et `pod` sont deux clés exclusives.
@@ -252,6 +319,40 @@ remote_port = 80
             .collect();
         assert_eq!(rivals, ["pg-prod"]);
         assert!(config.rivals("redis-0").is_empty());
+    }
+
+    #[test]
+    fn upsert_ajoute_renomme_et_refuse_les_doublons() {
+        let mut config = Config::parse(SAMPLE).unwrap();
+        let mut pg = config.get("pg-prod").unwrap().clone();
+        pg.name = "pg-production".into();
+        config.upsert(Some("pg-prod"), pg.clone()).unwrap();
+        assert!(config.get("pg-prod").is_none());
+        assert_eq!(config.forwards[1].name, "pg-production");
+
+        pg.name = "pg-staging".into();
+        assert!(matches!(
+            config.upsert(None, pg.clone()),
+            Err(ConfigError::DuplicateName(_))
+        ));
+        pg.name = " ".into();
+        assert!(matches!(
+            config.upsert(None, pg),
+            Err(ConfigError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn save_puis_load_avec_en_tete() {
+        let dir = std::env::temp_dir().join(format!("kubeport-config-{}", std::process::id()));
+        let path = dir.join("config.toml");
+        let mut config = Config::parse(SAMPLE).unwrap();
+        config.remove("redis-0");
+        config.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("# Forwards Kubeport"));
+        assert_eq!(Config::load(&path).unwrap(), config);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

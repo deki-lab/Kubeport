@@ -18,3 +18,6 @@ thiserror = "2.0.21"
 tokio = { version = "1.54.1", default-features = false, features = ["rt", "sync", "time"] }
 tracing = "0.1.44"
 uniffi = { version = "0.32.2", features = ["cli"] }
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["rt", "macros", "time"] }

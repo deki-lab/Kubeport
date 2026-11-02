@@ -1,0 +1,245 @@
+import SwiftUI
+
+/// Ce que le formulaire édite.
+enum FormMode: Equatable {
+    case create
+    case edit(ForwardView)
+    case duplicate(ForwardView)
+}
+
+/// Création et édition d'un Forward, avec des listes remplies depuis le cluster :
+/// Contexte → namespace → Service ou Pod → port distant → port local.
+struct ForwardForm: View {
+    let model: CoreModel
+    let mode: FormMode
+    let close: () -> Void
+
+    @State private var name = ""
+    @State private var nameEdited = false
+    @State private var context = ""
+    @State private var namespace = ""
+    @State private var kind: TargetKind = .service
+    @State private var targetName = ""
+    @State private var remotePort = ""
+    @State private var localPort = ""
+    @State private var localEdited = false
+
+    @State private var contexts: [String] = []
+    @State private var namespaces: [String] = []
+    @State private var targets: [TargetOption] = []
+    @State private var namespacesError: String?
+    @State private var targetsError: String?
+    @State private var error: String?
+    @State private var saving = false
+    @State private var confirmDelete = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.headline)
+
+            Form {
+                Picker("Contexte", selection: $context) {
+                    ForEach(contexts, id: \.self) { Text($0).tag($0) }
+                }
+
+                if namespacesError == nil, !namespaces.isEmpty {
+                    Picker("Namespace", selection: $namespace) {
+                        ForEach(namespaces, id: \.self) { Text($0).tag($0) }
+                    }
+                } else {
+                    TextField("Namespace", text: $namespace)
+                }
+
+                Picker("Type", selection: $kind) {
+                    Text("Service").tag(TargetKind.service)
+                    Text("Pod").tag(TargetKind.pod)
+                }
+                .pickerStyle(.segmented)
+
+                if !filteredTargets.isEmpty {
+                    Picker(kind == .service ? "Service" : "Pod", selection: $targetName) {
+                        ForEach(filteredTargets, id: \.name) { Text($0.name).tag($0.name) }
+                    }
+                } else {
+                    TextField(kind == .service ? "Service" : "Pod", text: $targetName)
+                }
+
+                if !portOptions.isEmpty {
+                    Picker("Port distant", selection: $remotePort) {
+                        ForEach(portOptions, id: \.port) { port in
+                            Text(port.name.map { "\(port.port) (\($0))" } ?? "\(port.port)")
+                                .tag(String(port.port))
+                        }
+                    }
+                } else {
+                    TextField("Port distant", text: $remotePort)
+                }
+
+                TextField("Port local", text: Binding(
+                    get: { localPort },
+                    set: { localPort = $0; localEdited = true }
+                ))
+                TextField("Nom", text: Binding(
+                    get: { name },
+                    set: { name = $0; nameEdited = true }
+                ))
+            }
+            .formStyle(.columns)
+
+            if let hint = namespacesError ?? targetsError {
+                Text(hint).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+            }
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.red).lineLimit(3)
+            }
+
+            HStack {
+                if case .edit(let forward) = mode {
+                    Button(confirmDelete ? "Confirmer la suppression" : "Supprimer", role: .destructive) {
+                        if confirmDelete { delete(forward) } else { confirmDelete = true }
+                    }
+                }
+                Spacer()
+                Button("Annuler", action: close).keyboardShortcut(.cancelAction)
+                Button("Enregistrer", action: save)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(saving || !isComplete)
+            }
+        }
+        .padding(12)
+        .task { await start() }
+        .onChange(of: context) { _, value in Task { await loadNamespaces(value) } }
+        .onChange(of: namespace) { _, value in Task { await loadTargets(context, value) } }
+        .onChange(of: kind) { _, _ in pickDefaultTarget() }
+        .onChange(of: targetName) { _, _ in pickDefaultPort(); autofill() }
+        .onChange(of: remotePort) { _, _ in autofill() }
+    }
+
+    private var title: String {
+        switch mode {
+        case .create: "Nouveau Forward"
+        case .edit: "Modifier le Forward"
+        case .duplicate: "Dupliquer le Forward"
+        }
+    }
+
+    private var filteredTargets: [TargetOption] { targets.filter { $0.kind == kind } }
+
+    private var portOptions: [PortOption] {
+        filteredTargets.first { $0.name == targetName }?.ports ?? []
+    }
+
+    private var isComplete: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !context.isEmpty
+            && !namespace.isEmpty && !targetName.isEmpty
+            && UInt16(remotePort) != nil && UInt16(localPort) != nil
+    }
+
+    // MARK: Chargement
+
+    private func start() async {
+        if let source = mode.source {
+            name = mode == .edit(source) ? source.name : "\(source.name)-copie"
+            nameEdited = true
+            context = source.context
+            namespace = source.namespace
+            kind = source.targetKind
+            targetName = source.targetName
+            remotePort = String(source.remotePort)
+            localPort = String(source.localPort)
+            localEdited = true
+        }
+        do {
+            contexts = try await model.contexts()
+            if context.isEmpty { context = contexts.first ?? "" }
+        } catch {
+            self.error = describe(error)
+        }
+    }
+
+    private func loadNamespaces(_ context: String) async {
+        guard !context.isEmpty else { return }
+        do {
+            namespaces = try await model.namespaces(context: context)
+            namespacesError = nil
+            if !namespaces.contains(namespace) {
+                namespace = namespaces.contains("default") ? "default" : namespaces.first ?? ""
+            }
+        } catch {
+            // Sans droit de lister les namespaces : saisie libre.
+            namespaces = []
+            namespacesError = "Namespaces non listés (\(describe(error))) : saisie libre."
+        }
+    }
+
+    private func loadTargets(_ context: String, _ namespace: String) async {
+        guard !context.isEmpty, !namespace.isEmpty else { return }
+        do {
+            targets = try await model.targets(context: context, namespace: namespace)
+            targetsError = nil
+        } catch {
+            targets = []
+            targetsError = "Cibles non listées (\(describe(error))) : saisie libre."
+        }
+        pickDefaultTarget()
+    }
+
+    private func pickDefaultTarget() {
+        if !filteredTargets.contains(where: { $0.name == targetName }) {
+            targetName = filteredTargets.first?.name ?? (filteredTargets.isEmpty ? targetName : "")
+        }
+        pickDefaultPort()
+    }
+
+    private func pickDefaultPort() {
+        let ports = portOptions.map { String($0.port) }
+        if !ports.isEmpty, !ports.contains(remotePort) { remotePort = ports[0] }
+    }
+
+    /// Nom pré-rempli `cible:port` et port local = port distant, tant que non modifiés.
+    private func autofill() {
+        if !nameEdited, !targetName.isEmpty { name = "\(targetName):\(remotePort)" }
+        if !localEdited { localPort = remotePort }
+    }
+
+    // MARK: Actions
+
+    private func save() {
+        guard let remote = UInt16(remotePort), let local = UInt16(localPort) else { return }
+        let input = ForwardInput(
+            name: name, context: context, namespace: namespace, targetKind: kind,
+            targetName: targetName, remotePort: remote, localPort: local
+        )
+        let previous: String? = if case .edit(let f) = mode { f.name } else { nil }
+        saving = true
+        Task {
+            defer { saving = false }
+            do {
+                try await model.save(previousName: previous, input)
+                close()
+            } catch {
+                self.error = describe(error)
+            }
+        }
+    }
+
+    private func delete(_ forward: ForwardView) {
+        Task {
+            do {
+                try await model.remove(forward.name)
+                close()
+            } catch {
+                self.error = describe(error)
+            }
+        }
+    }
+}
+
+private extension FormMode {
+    var source: ForwardView? {
+        switch self {
+        case .create: nil
+        case .edit(let f), .duplicate(let f): f
+        }
+    }
+}
