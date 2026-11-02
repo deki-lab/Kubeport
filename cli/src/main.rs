@@ -1,4 +1,4 @@
-//! CLI de développement : exerce `kubeport-core` sans l'interface.
+//! Development CLI: exercises `kubeport-core` without the UI.
 
 use std::path::PathBuf;
 use std::process::ExitCode;

@@ -1,4 +1,4 @@
-//! Choix du Pod résolu et traduction du port : logique pure, sans réseau.
+//! Resolved pod selection and port translation: pure logic, no network.
 
 use std::collections::BTreeMap;
 
@@ -7,30 +7,30 @@ use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 
 use crate::state::Reason;
 
-/// Port visé dans le pod : un numéro, ou un nom de port de conteneur.
+/// Port targeted in the pod: a number, or a container port name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortRef {
     Number(u16),
     Name(String),
 }
 
-/// Pod résolu et port numérique à ouvrir dessus.
+/// Resolved pod and the numeric port to open on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolved {
     pub pod: String,
     pub port: u16,
 }
 
-/// Ce qu'il faut surveiller pour une Cible Service : son selector et le port du pod.
+/// What to watch for a Service Target: its selector and the pod port.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceBackend {
     pub selector: String,
     pub port: PortRef,
 }
 
-/// Lit le selector du Service et traduit `remote_port` (port du Service) en port du pod.
+/// Reads the Service selector and translates `remote_port` (Service port) into the pod port.
 ///
-/// Une erreur ici demande une action humaine : le Service ne peut pas être forwardé.
+/// An error here needs human action: the Service cannot be forwarded.
 pub fn service_backend(service: &Service, remote_port: u16) -> Result<ServiceBackend, Reason> {
     let spec = service
         .spec
@@ -71,7 +71,7 @@ fn selector_string(selector: &BTreeMap<String, String>) -> String {
         .join(",")
 }
 
-/// Un pod est utilisable s'il est Ready et pas en cours de suppression (`Terminating`).
+/// A pod is usable if it is Ready and not being deleted (`Terminating`).
 pub fn is_ready(pod: &Pod) -> bool {
     if pod.metadata.deletion_timestamp.is_some() {
         return false;
@@ -84,7 +84,7 @@ pub fn is_ready(pod: &Pod) -> bool {
         .any(|c| c.type_ == "Ready" && c.status == "True")
 }
 
-/// Traduit un `PortRef` en numéro de port pour ce pod (ports nommés compris).
+/// Translates a `PortRef` into a port number for this pod (named ports included).
 pub fn pod_port(pod: &Pod, port: &PortRef) -> Option<u16> {
     match port {
         PortRef::Number(n) => Some(*n),
@@ -99,10 +99,10 @@ pub fn pod_port(pod: &Pod, port: &PortRef) -> Option<u16> {
     }
 }
 
-/// Choisit le Pod résolu parmi `pods`.
+/// Picks the Resolved pod among `pods`.
 ///
-/// Le Pod résolu actuel est conservé tant qu'il reste Ready ; sinon on prend le plus
-/// ancien pod Ready (date de création, puis nom pour départager).
+/// The current Resolved pod is kept as long as it stays Ready; otherwise the oldest
+/// Ready pod wins (creation date, then name as a tie-breaker).
 pub fn resolve<'a>(
     current: Option<&Resolved>,
     pods: impl IntoIterator<Item = &'a Pod>,
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn prend_le_plus_ancien_pod_ready() {
+    fn picks_the_oldest_ready_pod() {
         let pods = [
             pod("b", 200, true),
             pod("a", 100, false),
@@ -228,38 +228,38 @@ mod tests {
     }
 
     #[test]
-    fn garde_le_pod_resolu_tant_qu_il_est_ready() {
-        let pods = [pod("vieux", 100, true), pod("courant", 200, true)];
+    fn keeps_the_resolved_pod_while_it_is_ready() {
+        let pods = [pod("old", 100, true), pod("current", 200, true)];
         let current = Resolved {
-            pod: "courant".into(),
+            pod: "current".into(),
             port: 80,
         };
         let r = resolve(Some(&current), &pods, &PortRef::Number(80)).unwrap();
-        assert_eq!(r.pod, "courant");
+        assert_eq!(r.pod, "current");
     }
 
     #[test]
-    fn bascule_quand_le_pod_resolu_passe_terminating() {
+    fn switches_when_the_resolved_pod_turns_terminating() {
         let pods = [
-            terminating(pod("courant", 100, true)),
-            pod("neuf", 300, true),
+            terminating(pod("current", 100, true)),
+            pod("new", 300, true),
         ];
         let current = Resolved {
-            pod: "courant".into(),
+            pod: "current".into(),
             port: 80,
         };
         let r = resolve(Some(&current), &pods, &PortRef::Number(80)).unwrap();
-        assert_eq!(r.pod, "neuf");
+        assert_eq!(r.pod, "new");
     }
 
     #[test]
-    fn aucun_pod_ready_donne_none() {
+    fn no_ready_pod_gives_none() {
         let pods = [pod("a", 100, false), terminating(pod("b", 100, true))];
         assert_eq!(resolve(None, &pods, &PortRef::Number(80)), None);
     }
 
     #[test]
-    fn traduit_un_port_nomme() {
+    fn translates_a_named_port() {
         let pods = [pod("a", 100, true)];
         let r = resolve(None, &pods, &PortRef::Name("http".into())).unwrap();
         assert_eq!(r.port, 8080);
@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn service_traduit_target_port() {
+    fn service_translates_target_port() {
         let svc = service(
             None,
             &[("app", "web"), ("tier", "front")],
@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn service_sans_pods_est_refuse() {
+    fn service_without_pods_is_rejected() {
         let external = service(Some("ExternalName"), &[("a", "b")], vec![sport(80, None)]);
         assert_eq!(
             service_backend(&external, 80).unwrap_err(),
@@ -305,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn port_absent_du_service_est_refuse() {
+    fn port_missing_from_the_service_is_rejected() {
         let svc = service(None, &[("a", "b")], vec![sport(80, None)]);
         assert_eq!(
             service_backend(&svc, 5432).unwrap_err(),

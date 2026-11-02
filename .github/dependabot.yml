@@ -4,7 +4,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    # Une seule PR par semaine pour toutes les mises à jour github-actions.
+    # A single weekly PR for all github-actions updates.
     groups:
       github-actions:
         patterns: ["*"]
@@ -14,7 +14,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    # Une seule PR par semaine pour toutes les mises à jour cargo.
+    # A single weekly PR for all cargo updates.
     groups:
       cargo:
         patterns: ["*"]

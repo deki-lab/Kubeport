@@ -1,4 +1,4 @@
-//! Tests du pont FFI tel que Swift l'utilise.
+//! Tests of the FFI bridge as Swift uses it.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -25,7 +25,7 @@ impl Recorder {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
         panic!(
-            "attente dépassée : {what} ; vu : {:?}",
+            "timed out waiting for: {what}; saw: {:?}",
             self.0.lock().unwrap()
         );
     }
@@ -51,9 +51,9 @@ fn input(name: &str, context: &str, local_port: u16) -> ForwardInput {
     }
 }
 
-/// Sans cluster : enregistrement, Actif restauré au relancement, suppression.
+/// Without a cluster: save, Active restored on relaunch, removal.
 #[tokio::test(flavor = "current_thread")]
-async fn enregistre_restaure_et_supprime() {
+async fn saves_restores_and_removes() {
     let dir = temp_dir("session");
     let config = dir.join("config.toml");
     let path = Some(config.to_string_lossy().into_owned());
@@ -64,23 +64,23 @@ async fn enregistre_restaure_et_supprime() {
         std::fs::read_to_string(&config)
             .unwrap()
             .contains("[[forward]]"),
-        "exemple commenté créé"
+        "commented example created"
     );
 
-    core.save_forward(None, input("a", "contexte-absent", 28001))
+    core.save_forward(None, input("a", "missing-context", 28001))
         .await
         .unwrap();
-    core.save_forward(None, input("b", "contexte-absent", 28002))
+    core.save_forward(None, input("b", "missing-context", 28002))
         .await
         .unwrap();
-    let doublon = core
-        .save_forward(None, input("a", "contexte-absent", 28003))
+    let duplicate = core
+        .save_forward(None, input("a", "missing-context", 28003))
         .await;
-    assert!(doublon.is_err(), "nom en double refusé");
+    assert!(duplicate.is_err(), "duplicate name rejected");
 
     core.activate("a".into());
     recorder
-        .wait("a Actif en Erreur", |v| {
+        .wait("a Active in Error", |v| {
             v.iter()
                 .any(|f| f.name == "a" && f.active && f.state.is_some())
         })
@@ -91,7 +91,7 @@ async fn enregistre_restaure_et_supprime() {
     let restored = Recorder::default();
     let core = Core::new(path, Box::new(restored.clone())).unwrap();
     restored
-        .wait("a restauré Actif, b Inactif", |v| {
+        .wait("a restored Active, b Inactive", |v| {
             v.len() == 2
                 && v.iter().any(|f| f.name == "a" && f.active)
                 && v.iter().any(|f| f.name == "b" && !f.active)
@@ -99,7 +99,7 @@ async fn enregistre_restaure_et_supprime() {
         .await;
 
     core.remove_forward("b".into()).await.unwrap();
-    restored.wait("b supprimé", |v| v.len() == 1).await;
+    restored.wait("b removed", |v| v.len() == 1).await;
     assert!(
         !std::fs::read_to_string(&config)
             .unwrap()
@@ -108,11 +108,11 @@ async fn enregistre_restaure_et_supprime() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
-/// Avec docker-desktop et tests/fixtures/whoami.yaml appliqué :
+/// With docker-desktop and tests/fixtures/whoami.yaml applied:
 /// `cargo test -p kubeport-ffi -- --ignored`
 #[tokio::test(flavor = "current_thread")]
 #[ignore]
-async fn formulaire_sur_docker_desktop() {
+async fn form_on_docker_desktop() {
     let dir = temp_dir("cluster");
     let path = Some(dir.join("config.toml").to_string_lossy().into_owned());
     let recorder = Recorder::default();
@@ -137,11 +137,11 @@ async fn formulaire_sur_docker_desktop() {
     assert_eq!(whoami.ports[0].port, 8080);
     assert!(
         !targets.iter().any(|t| t.name == "external"),
-        "ExternalName masqué"
+        "ExternalName hidden"
     );
     assert!(
         targets.iter().any(|t| t.kind == TargetKind::Pod),
-        "pods proposés"
+        "pods offered"
     );
 
     core.save_forward(None, input("w", "docker-desktop", 28080))
@@ -149,18 +149,18 @@ async fn formulaire_sur_docker_desktop() {
         .unwrap();
     core.activate("w".into());
     recorder
-        .wait("w Connecté", |v| {
+        .wait("w Connected", |v| {
             v.iter()
                 .any(|f| matches!(f.state, Some(kubeport_ffi::RealStateView::Connected { .. })))
         })
         .await;
 
-    // Modifier un Forward Actif le relance avec ses nouveaux réglages.
+    // Editing an Active Forward restarts it with its new settings.
     core.save_forward(Some("w".into()), input("w2", "docker-desktop", 28081))
         .await
         .unwrap();
     recorder
-        .wait("w2 Actif sur 28081", |v| {
+        .wait("w2 Active on 28081", |v| {
             v.iter()
                 .any(|f| f.name == "w2" && f.active && f.local_port == 28081)
         })

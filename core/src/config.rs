@@ -1,17 +1,17 @@
-//! Configuration des Forwards, stockée en TOML et éditable à la main.
+//! Forwards configuration, stored as TOML and hand-editable.
 //!
 //! ```toml
 //! [[forward]]
 //! name = "postgres-staging"
 //! context = "docker-desktop"
 //! namespace = "db"
-//! service = "postgres"     # ou : pod = "postgres-0"
+//! service = "postgres"     # or: pod = "postgres-0"
 //! remote_port = 5432
-//! local_port = 5432        # optionnel, vaut remote_port par défaut
-//! idle_timeout = 60        # optionnel : minutes, ou "never" ; absent : réglage par défaut
+//! local_port = 5432        # optional, defaults to remote_port
+//! idle_timeout = 60        # optional: minutes, or "never"; absent: default setting
 //! ```
 //!
-//! En tête de fichier, `idle_timeout = 60` fixe le Délai d'inactivité par défaut.
+//! At the top of the file, `idle_timeout = 60` sets the default Idle timeout.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -19,26 +19,26 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-/// Ressource Kubernetes visée par un Forward.
+/// Kubernetes resource targeted by a Forward.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     Service(String),
     Pod(String),
 }
 
-/// Délai d'inactivité propre à un Forward.
+/// A Forward's own Idle timeout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IdleTimeout {
-    /// Suit le réglage par défaut de la config.
+    /// Follows the config's default setting.
     #[default]
     Inherit,
-    /// Jamais désactivé automatiquement.
+    /// Never deactivated automatically.
     Never,
-    /// Désactivé après cette durée sans connexion ouverte.
+    /// Deactivated after this long with no open connection.
     After(Duration),
 }
 
-/// Un port-forward configuré. Son `name` l'identifie de façon unique.
+/// A configured port-forward. Its `name` identifies it uniquely.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RawForward", into = "RawForward")]
 pub struct Forward {
@@ -53,10 +53,10 @@ pub struct Forward {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    /// Réglage : kubeconfig forcé. Absent : celui du shell de login, puis `~/.kube/config`.
+    /// Setting: forced kubeconfig. Absent: the login shell's, then `~/.kube/config`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kubeconfig: Option<PathBuf>,
-    /// Réglage : Délai d'inactivité par défaut, en minutes. Absent : jamais.
+    /// Setting: default Idle timeout, in minutes. Absent: never.
     #[serde(
         default,
         rename = "idle_timeout",
@@ -86,7 +86,7 @@ pub enum ConfigError {
     PortZero,
 }
 
-/// Champ obligatoire d'un Forward.
+/// Required field of a Forward.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
     Name,
@@ -106,10 +106,10 @@ impl std::fmt::Display for Field {
     }
 }
 
-/// En-tête écrit en tête du fichier quand l'app l'enregistre.
+/// Header written at the top of the file when the app saves it.
 const HEADER: &str = "# Kubeport Forwards: edit here or in the app (click Reload after editing this file).\n# One [[forward]] block per port-forward; `service` or `pod`, not both.\n\n";
 
-/// Écrit dans un fichier temporaire puis renomme : jamais de fichier à moitié écrit.
+/// Writes to a temporary file, then renames: never a half-written file.
 pub(crate) fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
@@ -120,7 +120,7 @@ pub(crate) fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
 }
 
 impl Config {
-    /// Emplacement par défaut : `~/Library/Application Support/k8s_forwarder/config.toml`.
+    /// Default location: `~/Library/Application Support/k8s_forwarder/config.toml`.
     pub fn default_path() -> PathBuf {
         let home = std::env::var_os("HOME")
             .map(PathBuf::from)
@@ -139,7 +139,7 @@ impl Config {
         Ok(config)
     }
 
-    /// Charge la config ; un fichier absent donne une config vide.
+    /// Loads the config; a missing file gives an empty config.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         match std::fs::read_to_string(path) {
             Ok(text) => Self::parse(&text),
@@ -163,7 +163,7 @@ impl Config {
         })
     }
 
-    /// Ajoute un Forward, ou remplace celui nommé `previous` (qui peut être renommé).
+    /// Adds a Forward, or replaces the one named `previous` (which may be renamed).
     pub fn upsert(&mut self, previous: Option<&str>, forward: Forward) -> Result<(), ConfigError> {
         validate(&forward)?;
         let index = previous.and_then(|p| self.forwards.iter().position(|f| f.name == p));
@@ -186,7 +186,7 @@ impl Config {
         self.forwards.retain(|f| f.name != name);
     }
 
-    /// Délai d'inactivité effectif d'un Forward ; `None` : jamais.
+    /// Effective Idle timeout of a Forward; `None`: never.
     pub fn idle_timeout(&self, forward: &Forward) -> Option<Duration> {
         match forward.idle_timeout {
             IdleTimeout::Inherit => self
@@ -202,7 +202,7 @@ impl Config {
         self.forwards.iter().find(|f| f.name == name)
     }
 
-    /// Forwards concurrents de `name` : ceux qui partagent son port local.
+    /// Competing Forwards of `name`: those sharing its local port.
     pub fn rivals(&self, name: &str) -> Vec<&Forward> {
         let Some(forward) = self.get(name) else {
             return Vec::new();
@@ -235,7 +235,7 @@ fn validate(forward: &Forward) -> Result<(), ConfigError> {
     Ok(())
 }
 
-/// Forme TOML d'un Forward : `service` et `pod` sont deux clés exclusives.
+/// TOML shape of a Forward: `service` and `pod` are mutually exclusive keys.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawForward {
@@ -253,7 +253,7 @@ struct RawForward {
     idle_timeout: Option<RawIdle>,
 }
 
-/// `idle_timeout = 60` (minutes) ou `idle_timeout = "never"`.
+/// `idle_timeout = 60` (minutes) or `idle_timeout = "never"`.
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 enum RawIdle {
@@ -357,7 +357,7 @@ local_port = 16379
 "#;
 
     #[test]
-    fn parse_les_deux_types_de_cible_et_le_port_local_par_defaut() {
+    fn parses_both_target_kinds_and_the_default_local_port() {
         let config = Config::parse(SAMPLE).unwrap();
         let pg = config.get("pg-staging").unwrap();
         assert_eq!(pg.target, Target::Service("postgres".into()));
@@ -368,14 +368,14 @@ local_port = 16379
     }
 
     #[test]
-    fn aller_retour_toml_sans_perte() {
+    fn lossless_toml_round_trip() {
         let config = Config::parse(SAMPLE).unwrap();
         let again = Config::parse(&config.to_toml().unwrap()).unwrap();
         assert_eq!(config, again);
     }
 
     #[test]
-    fn refuse_service_et_pod_en_meme_temps() {
+    fn rejects_service_and_pod_together() {
         let text = r#"
 [[forward]]
 name = "x"
@@ -390,7 +390,7 @@ remote_port = 80
     }
 
     #[test]
-    fn refuse_deux_noms_identiques() {
+    fn rejects_two_identical_names() {
         let text = SAMPLE.replace("name = \"pg-prod\"", "name = \"pg-staging\"");
         assert!(matches!(
             Config::parse(&text),
@@ -399,7 +399,7 @@ remote_port = 80
     }
 
     #[test]
-    fn rivaux_partagent_le_port_local() {
+    fn competing_forwards_share_the_local_port() {
         let config = Config::parse(SAMPLE).unwrap();
         let rivals: Vec<_> = config
             .rivals("pg-staging")
@@ -411,7 +411,7 @@ remote_port = 80
     }
 
     #[test]
-    fn upsert_ajoute_renomme_et_refuse_les_doublons() {
+    fn upsert_adds_renames_and_rejects_duplicates() {
         let mut config = Config::parse(SAMPLE).unwrap();
         let mut pg = config.get("pg-prod").unwrap().clone();
         pg.name = "pg-production".into();
@@ -432,7 +432,7 @@ remote_port = 80
     }
 
     #[test]
-    fn save_puis_load_avec_en_tete() {
+    fn save_then_load_with_header() {
         let dir = std::env::temp_dir().join(format!("kubeport-config-{}", std::process::id()));
         let path = dir.join("config.toml");
         let mut config = Config::parse(SAMPLE).unwrap();
@@ -445,19 +445,19 @@ remote_port = 80
     }
 
     #[test]
-    fn delai_d_inactivite_par_defaut_et_par_forward() {
+    fn default_and_per_forward_idle_timeout() {
         let text = r#"
 idle_timeout = 60
 
 [[forward]]
-name = "herite"
+name = "inherits"
 context = "c"
 namespace = "n"
 service = "s"
 remote_port = 80
 
 [[forward]]
-name = "jamais"
+name = "no-timeout"
 context = "c"
 namespace = "n"
 service = "s"
@@ -465,7 +465,7 @@ remote_port = 81
 idle_timeout = "never"
 
 [[forward]]
-name = "court"
+name = "short"
 context = "c"
 namespace = "n"
 service = "s"
@@ -478,15 +478,15 @@ idle_timeout = 15
                 .idle_timeout(config.get(name).unwrap())
                 .map(|d| d.as_secs() / 60)
         };
-        assert_eq!(minutes("herite"), Some(60));
-        assert_eq!(minutes("jamais"), None);
-        assert_eq!(minutes("court"), Some(15));
+        assert_eq!(minutes("inherits"), Some(60));
+        assert_eq!(minutes("no-timeout"), None);
+        assert_eq!(minutes("short"), Some(15));
         assert_eq!(Config::parse(&config.to_toml().unwrap()).unwrap(), config);
-        assert!(Config::parse(&text.replace("\"never\"", "\"bientot\"")).is_err());
+        assert!(Config::parse(&text.replace("\"never\"", "\"soon\"")).is_err());
     }
 
     #[test]
-    fn fichier_absent_donne_config_vide() {
+    fn missing_file_gives_empty_config() {
         let config = Config::load(Path::new("/nonexistent/kubeport.toml")).unwrap();
         assert!(config.forwards.is_empty());
     }

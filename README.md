@@ -1,9 +1,9 @@
 # Kubeport
 
-Port-forwards Kubernetes depuis la barre de menu macOS. On configure un Forward une fois, on l'active d'un clic, et il suit automatiquement les pods derrière un Service (rollouts compris).
+Kubernetes port-forwards from the macOS menu bar. Configure a Forward once, turn it on with one click, and it automatically follows the pods behind a Service (rollouts included).
 
-- Vocabulaire : [GLOSSARY.md](GLOSSARY.md)
-- Décisions d'architecture : [docs/adr/](docs/adr/)
+- Vocabulary: [GLOSSARY.md](GLOSSARY.md)
+- Architecture decisions: [docs/adr/](docs/adr/)
 
 ## Installation
 
@@ -11,58 +11,58 @@ Port-forwards Kubernetes depuis la barre de menu macOS. On configure un Forward 
 brew install --cask deki-lab/tap/kubeport
 ```
 
-L'app n'est pas encore signée par un Developer ID Apple ni notarisée. Au premier lancement, macOS la bloque :
+The app is not yet signed with an Apple Developer ID nor notarized. macOS blocks it on first launch:
 
-1. Lancer Kubeport une première fois, puis fermer l'alerte.
-2. Ouvrir **Réglages Système > Confidentialité et sécurité**.
-3. En bas, cliquer **Ouvrir quand même** en face de Kubeport, puis confirmer.
+1. Launch Kubeport once, then dismiss the alert.
+2. Open **System Settings > Privacy & Security**.
+3. At the bottom, click **Open Anyway** next to Kubeport, then confirm.
 
-Prérequis : macOS 14 ou plus récent, Mac Apple Silicon.
+Requirements: macOS 14 or later, Apple Silicon Mac.
 
-## Utilisation
+## Usage
 
-L'interface suit la langue de macOS : français ou anglais (anglais pour les autres langues).
+The UI follows the macOS language: English or French (English for any other language).
 
-- **Nouveau Forward** : Contexte, namespace, Service ou Pod et ports sont proposés depuis le cluster.
-- Clic droit sur un Forward : **Modifier** (un Forward Actif est relancé) ou **Dupliquer**.
-- **Réglages** (roue dentée) : lancement à l'ouverture de session, kubeconfig forcé.
-- Les Forwards Actifs à la fermeture sont réactivés au lancement suivant.
-- **Désactivation auto** : un Forward Actif sans connexion ouverte pendant le Délai d'inactivité (Réglages, ou par Forward : jamais, 15 min, 1 h, 4 h) passe Inactif de lui-même. Dans `config.toml` : `idle_timeout = 60` (minutes) en tête de fichier ou dans un `[[forward]]`, `"never"` pour jamais.
-- Fichiers, dans `~/Library/Application Support/k8s_forwarder/` :
-  - `config.toml` : les Forwards, éditable à la main (bouton **Recharger** ensuite). L'app réécrit le fichier quand on l'édite depuis l'interface : les commentaires ajoutés à la main sont perdus.
-  - `state.toml` : Forwards Actifs, géré par l'app.
+- **New Forward**: Context, namespace, Service or Pod, and ports are suggested from the cluster.
+- Right-click a Forward: **Edit** (an Active Forward is restarted) or **Duplicate**.
+- **Settings** (gear icon): open at login, forced kubeconfig.
+- Forwards that are Active when the app quits are reactivated on next launch.
+- **Auto-deactivate**: an Active Forward with no open connection for the Idle timeout (in Settings, or per Forward: never, 15 min, 1 h, 4 h) turns Inactive on its own. In `config.toml`: `idle_timeout = 60` (minutes) at the top of the file or inside a `[[forward]]`, `"never"` to disable.
+- Files, in `~/Library/Application Support/k8s_forwarder/`:
+  - `config.toml`: the Forwards, hand-editable (then click **Reload**). The app rewrites the file when you edit from the UI: hand-written comments are lost.
+  - `state.toml`: Active Forwards, managed by the app.
 
-## Développement
+## Development
 
-Prérequis : Rust stable, Xcode (pour `xcodebuild -create-xcframework`).
+Requirements: stable Rust, Xcode (for `xcodebuild -create-xcframework`).
 
 ```sh
-cargo test --all                 # cœur Rust et pont FFI
-cargo test -p kubeport-ffi -- --ignored   # formulaire sur docker-desktop
-cargo run -p kubeport-cli        # CLI de développement
-./scripts/build-ffi.sh           # cœur Rust → app/KubeportFFI.xcframework + bindings Swift
+cargo test --all                 # Rust core and FFI bridge
+cargo test -p kubeport-ffi -- --ignored   # form against docker-desktop
+cargo run -p kubeport-cli        # development CLI
+./scripts/build-ffi.sh           # Rust core → app/KubeportFFI.xcframework + Swift bindings
 ./scripts/build-app.sh           # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg
-./scripts/measure-footprint.sh   # empreinte mémoire de l'app lancée (budget : 35 Mo)
-./scripts/rollout-test.sh        # bout en bout sur docker-desktop : rollout sans coupure
-python3 scripts/check-l10n.py      # traductions : clés manquantes, inutilisées, placeholders
+./scripts/measure-footprint.sh   # memory footprint of the running app (budget: 35 MB)
+./scripts/rollout-test.sh        # end to end on docker-desktop: rollout without downtime
+python3 scripts/check-l10n.py      # translations: missing keys, unused keys, placeholders
 ```
 
-Variables utiles pour lancer l'app en développement :
+Useful variables to run the app during development:
 
 ```sh
 KUBEPORT_CONFIG=tests/fixtures/config.toml KUBEPORT_ACTIVATE=whoami \
   dist/Kubeport.app/Contents/MacOS/Kubeport
 ```
 
-## CLI de développement
+## Development CLI
 
 ```sh
 cargo run -p kubeport-cli -- --config tests/fixtures/config.toml list
 cargo run -p kubeport-cli -- --config tests/fixtures/config.toml up whoami
 ```
 
-Format de la config : voir `core/src/config.rs`.
+Config format: see `core/src/config.rs`.
 
 ## Releases
 
-Les versions sont gérées par [release-please](https://github.com/googleapis/release-please) : merge en squash uniquement, titres de PR au format [Conventional Commits](https://www.conventionalcommits.org/) (`feat: …`, `fix: …`). Merger la PR de release crée le tag, construit le `.dmg`, l'attache à la release, et met à jour le cask du tap quand `HOMEBREW_TAP_ENABLED` vaut `true`.
+Versions are managed by [release-please](https://github.com/googleapis/release-please): squash merge only, PR titles in [Conventional Commits](https://www.conventionalcommits.org/) format (`feat: …`, `fix: …`). Merging the release PR creates the tag, builds the `.dmg`, attaches it to the release, and updates the tap's cask when `HOMEBREW_TAP_ENABLED` is `true`.

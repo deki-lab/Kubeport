@@ -1,7 +1,7 @@
 import AppKit
 
-/// Icône de la barre de menu : contour (aucun Forward Actif), pleine (au moins un Actif),
-/// pleine avec un point rouge (au moins un Forward en Erreur).
+/// Menu bar icon: outline (no Active Forward), filled (at least one Active),
+/// filled with a red dot (at least one Forward in Error).
 enum StatusIcon {
     private static let idle = template("arrow.left.arrow.right.circle")
     private static let active = template("arrow.left.arrow.right.circle.fill")
@@ -23,8 +23,8 @@ enum StatusIcon {
         return image
     }
 
-    /// Le point rouge interdit le mode template : on dessine le symbole dans la couleur
-    /// du texte de la barre de menu au moment du rendu (clair ou sombre).
+    /// The red dot rules out template mode: the symbol is drawn in the menu bar
+    /// text color at render time (light or dark).
     private static func withRedDot(_ base: NSImage) -> NSImage {
         let size = base.size
         let image = NSImage(size: size, flipped: false) { rect in

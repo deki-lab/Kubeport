@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   rust:
-    # Le cœur est multiplateforme : Linux démarre vite et coûte 10x moins que macOS.
+    # The core is cross-platform: Linux starts fast and costs 10x less than macOS.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -25,17 +25,17 @@ jobs:
       - run: cargo test --all
 
   app:
-    # Jamais de code de fork sur une machine perso.
+    # Never run fork code on a personal machine.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    # Runners auto-hébergés (Mac du mainteneur) tant que le dépôt est privé : GitHub annule
-    # les jobs macos-15 arm64 faute de capacité. Revenir à `macos-15` avant le passage en public.
+    # Self-hosted runners (maintainer's Mac) while the repo is private: GitHub cancels
+    # macos-15 arm64 jobs for lack of capacity. Switch back to `macos-15` before going public.
     runs-on: [self-hosted, macOS, ARM64, kubeport]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-        # Sur le Mac du mainteneur, on garde son rustup tel quel.
+        # On the maintainer's Mac, keep their rustup as is.
         if: runner.environment == 'github-hosted'
         with:
           toolchain: stable

@@ -1,4 +1,4 @@
-//! Exécution d'un Forward Actif : écoute locale, suivi du Pod résolu, un flux par connexion.
+//! Running an Active Forward: local listener, Resolved pod tracking, one stream per connection.
 
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
@@ -22,12 +22,12 @@ use crate::state::{RealState, Reason};
 
 pub(crate) type Report = Arc<dyn Fn(RealState) + Send + Sync>;
 
-/// Délai d'inactivité d'un Forward Actif : passe Inactif après `timeout` sans connexion ouverte.
+/// Idle timeout of an Active Forward: goes Inactive after `timeout` with no open connection.
 pub(crate) struct Idle {
     pub timeout: Option<Duration>,
-    /// Publie l'échéance en cours (`None` : une connexion est ouverte, ou pas de délai).
+    /// Publishes the current deadline (`None`: a connection is open, or no timeout).
     pub deadline: Arc<dyn Fn(Option<SystemTime>) + Send + Sync>,
-    /// Délai écoulé : le Manager passe le Forward Inactif.
+    /// Timeout elapsed: the Manager makes the Forward Inactive.
     pub expired: Arc<dyn Fn() + Send + Sync>,
 }
 
@@ -38,7 +38,7 @@ impl Idle {
     }
 }
 
-/// Erreur classée : `Fatal` demande une action humaine, `Transient` se répare seule.
+/// Classified error: `Fatal` needs human action, `Transient` heals on its own.
 enum Fault {
     Fatal(Reason),
     Transient(Reason),
@@ -78,7 +78,7 @@ fn classify_watch(err: &watcher::Error) -> Fault {
     }
 }
 
-/// Fait vivre un Forward Actif jusqu'à `cancel`, ou jusqu'à une Erreur.
+/// Keeps an Active Forward running until `cancel`, or until an Error.
 pub(crate) async fn run(
     forward: Forward,
     client: Client,
@@ -140,7 +140,7 @@ async fn serve(forward: &Forward, client: Client, report: &Report, idle: &Idle) 
     }
 }
 
-/// Lit le Service ; réessaie tant que l'API est injoignable, abandonne sur une Erreur.
+/// Reads the Service; retries while the API is unreachable, gives up on an Error.
 async fn service_with_retry(
     services: &Api<Service>,
     name: &str,
@@ -181,7 +181,7 @@ async fn service_with_retry(
     }
 }
 
-/// Surveille les pods de la Cible et publie le Pod résolu à chaque changement.
+/// Watches the Target's pods and publishes the Resolved pod on every change.
 async fn track_pods(
     pods: Api<Pod>,
     config: watcher::Config,
@@ -239,7 +239,7 @@ fn pod_name(pod: &Pod) -> String {
     pod.metadata.name.clone().unwrap_or_default()
 }
 
-/// Accepte les connexions locales ; chacune ouvre son propre flux vers le Pod résolu du moment.
+/// Accepts local connections; each opens its own stream to the current Resolved pod.
 async fn accept_loop(
     listener: TcpListener,
     pods: Api<Pod>,
@@ -247,12 +247,12 @@ async fn accept_loop(
     fatal: mpsc::Sender<Reason>,
     idle: &Idle,
 ) {
-    // Abandonner le JoinSet coupe toutes les connexions quand le Forward s'arrête.
+    // Dropping the JoinSet cuts every connection when the Forward stops.
     let mut connections = JoinSet::new();
-    // Échéance de désactivation : armée tant qu'aucune connexion n'est ouverte.
+    // Deactivation deadline: armed while no connection is open.
     let mut idle_at = idle.timeout.map(|t| idle.arm(t));
     loop {
-        // Le futur est créé même quand la branche est désactivée : jamais d'unwrap ici.
+        // The future is created even when the branch is disabled: never unwrap here.
         let far = Instant::now() + Duration::from_secs(365 * 24 * 3600);
         tokio::select! {
             () = tokio::time::sleep_until(idle_at.unwrap_or(far)), if idle_at.is_some() => {
@@ -262,7 +262,7 @@ async fn accept_loop(
             accepted = listener.accept() => {
                 let Ok((socket, _)) = accepted else { continue };
                 let Some(target) = resolved.borrow().clone() else {
-                    // Aucun pod Ready : on refuse la connexion plutôt que de la faire attendre.
+                    // No Ready pod: refuse the connection rather than keep it waiting.
                     continue;
                 };
                 if idle_at.take().is_some() {

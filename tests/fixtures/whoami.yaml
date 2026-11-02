@@ -1,4 +1,4 @@
-# Cible de test : 2 replicas, port nommé `http`, Service sur un port différent.
+# Test Target: 2 replicas, port named `http`, Service on a different port.
 apiVersion: v1
 kind: Namespace
 metadata:

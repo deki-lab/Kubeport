@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Construit dist/Kubeport.app puis dist/Kubeport-<version>-arm64.dmg.
-# Signature ad hoc uniquement (pas de compte Apple Developer pour l'instant).
+# Builds dist/Kubeport.app, then dist/Kubeport-<version>-arm64.dmg.
+# Ad hoc signing only (no Apple Developer account for now).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

@@ -26,6 +26,6 @@ local_port = 18081
 name = "absent"
 context = "docker-desktop"
 namespace = "kubeport-it"
-service = "nexistepas"
+service = "does-not-exist"
 remote_port = 80
 local_port = 18082

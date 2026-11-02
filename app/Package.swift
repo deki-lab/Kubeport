@@ -5,7 +5,7 @@ let package = Package(
     name: "Kubeport",
     platforms: [.macOS(.v14)],
     targets: [
-        // Construit par scripts/build-ffi.sh (cœur Rust + en-têtes UniFFI).
+        // Built by scripts/build-ffi.sh (Rust core + UniFFI headers).
         .binaryTarget(name: "kubeport_ffiFFI", path: "KubeportFFI.xcframework"),
         .executableTarget(
             name: "Kubeport",
@@ -17,6 +17,6 @@ let package = Package(
             ]
         ),
     ],
-    // Le code généré par UniFFI n'est pas encore annoté pour la concurrence stricte de Swift 6.
+    // UniFFI-generated code is not yet annotated for Swift 6 strict concurrency.
     swiftLanguageModes: [.v5]
 )

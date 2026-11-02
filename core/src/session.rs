@@ -1,6 +1,6 @@
-//! Forwards Actifs à la fermeture, pour les réactiver au prochain lancement.
-//! Stockés dans `state.toml`, à côté de la config : la config reste éditable à la main
-//! sans être réécrite à chaque clic.
+//! Forwards Active at shutdown, to reactivate them on the next launch.
+//! Stored in `state.toml`, next to the config: the config stays hand-editable
+//! without being rewritten on every click.
 
 use std::path::{Path, PathBuf};
 
@@ -16,7 +16,7 @@ pub fn path_next_to(config_path: &Path) -> PathBuf {
     config_path.with_file_name("state.toml")
 }
 
-/// Noms des Forwards Actifs enregistrés ; vide si le fichier est absent ou illisible.
+/// Names of the saved Active Forwards; empty if the file is missing or unreadable.
 pub fn load_active(path: &Path) -> Vec<String> {
     std::fs::read_to_string(path)
         .ok()
@@ -38,7 +38,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn aller_retour_et_fichier_absent() {
+    fn round_trip_and_missing_file() {
         let dir = std::env::temp_dir().join(format!("kubeport-session-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("state.toml");
