@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use kubeport_core::catalog::{self, TargetChoice};
 use kubeport_core::{
-    Config, Forward, KubeEnv, Manager, RealState, Statuses, Target, login_shell_env, session,
+    Config, ConfigError, Field, Forward, KubeEnv, Manager, ManagerError, RealState, Reason,
+    Statuses, Target, login_shell_env, session,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -27,8 +28,92 @@ pub enum TargetKind {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum RealStateView {
     Connected { pod: String },
-    Reconnecting { reason: String },
-    Error { reason: String },
+    Reconnecting { reason: ReasonView },
+    Error { reason: ReasonView },
+}
+
+/// Cause d'une Reconnexion ou d'une Erreur, traduite côté Swift.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum ReasonView {
+    ConnectingToCluster,
+    SearchingPod,
+    NoReadyPod,
+    PodNotReady { pod: String },
+    ApiUnreachable { detail: String },
+    ApiError { code: u16, detail: String },
+    PortInUse { port: u16 },
+    PortUnavailable { port: u16, detail: String },
+    AuthFailed { detail: String },
+    AccessDenied { detail: String },
+    NotFound { detail: String },
+    ServiceNotFound { namespace: String, service: String },
+    ExternalNameService,
+    ServiceWithoutSelector,
+    PortNotExposed { port: u16 },
+    InvalidTargetPort { value: i32 },
+    ContextMissing { context: String },
+    Kubeconfig { detail: String },
+}
+
+impl From<Reason> for ReasonView {
+    fn from(reason: Reason) -> Self {
+        match reason {
+            Reason::ConnectingToCluster => Self::ConnectingToCluster,
+            Reason::SearchingPod => Self::SearchingPod,
+            Reason::NoReadyPod => Self::NoReadyPod,
+            Reason::PodNotReady { pod } => Self::PodNotReady { pod },
+            Reason::ApiUnreachable { detail } => Self::ApiUnreachable { detail },
+            Reason::ApiError { code, detail } => Self::ApiError { code, detail },
+            Reason::PortInUse { port } => Self::PortInUse { port },
+            Reason::PortUnavailable { port, detail } => Self::PortUnavailable { port, detail },
+            Reason::AuthFailed { detail } => Self::AuthFailed { detail },
+            Reason::AccessDenied { detail } => Self::AccessDenied { detail },
+            Reason::NotFound { detail } => Self::NotFound { detail },
+            Reason::ServiceNotFound { namespace, service } => {
+                Self::ServiceNotFound { namespace, service }
+            }
+            Reason::ExternalNameService => Self::ExternalNameService,
+            Reason::ServiceWithoutSelector => Self::ServiceWithoutSelector,
+            Reason::PortNotExposed { port } => Self::PortNotExposed { port },
+            Reason::InvalidTargetPort { value } => Self::InvalidTargetPort { value },
+            Reason::ContextMissing { context } => Self::ContextMissing { context },
+            Reason::Kubeconfig { detail } => Self::Kubeconfig { detail },
+        }
+    }
+}
+
+impl std::fmt::Display for ReasonView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+/// Champ obligatoire manquant dans le formulaire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum FormField {
+    Name,
+    Context,
+    Namespace,
+    Target,
+}
+
+/// Message bref pour l'utilisateur, traduit côté Swift.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum Notice {
+    /// `rival` a été désactivé : `by` utilise le même port local.
+    RivalDeactivated {
+        rival: String,
+        by: String,
+    },
+    UnknownForward {
+        name: String,
+    },
+    ConfigNotReloaded {
+        detail: String,
+    },
+    CoreStartFailed {
+        detail: String,
+    },
 }
 
 /// Un Forward tel que l'interface l'affiche.
@@ -75,11 +160,19 @@ pub struct TargetOption {
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum CoreError {
-    #[error("{message}")]
-    Config { message: String },
-    #[error("{message}")]
-    Cluster { message: String },
-    #[error("cœur arrêté")]
+    #[error("a Forward named {name:?} already exists")]
+    DuplicateName { name: String },
+    #[error("{field:?} is missing")]
+    MissingField { field: FormField },
+    #[error("port 0 is not allowed")]
+    PortZero,
+    #[error("config file: {detail}")]
+    ConfigFile { detail: String },
+    #[error("{reason}")]
+    Cluster { reason: ReasonView },
+    #[error("cluster listing failed: {detail}")]
+    ClusterList { detail: String },
+    #[error("core stopped")]
     Stopped,
 }
 
@@ -89,7 +182,7 @@ pub trait CoreListener: Send + Sync {
     /// Liste complète des Forwards, dans l'ordre de la config, à chaque changement.
     fn forwards_changed(&self, forwards: Vec<ForwardView>);
     /// Message bref pour l'utilisateur (Forward concurrent désactivé, config invalide…).
-    fn notice(&self, message: String);
+    fn notice(&self, notice: Notice);
 }
 
 type Reply<T> = oneshot::Sender<Result<T, CoreError>>;
@@ -136,8 +229,8 @@ impl Core {
         std::thread::Builder::new()
             .name("kubeport-core".into())
             .spawn(move || run(config, thread_path, receiver, listener))
-            .map_err(|e| CoreError::Config {
-                message: format!("démarrage du cœur : {e}"),
+            .map_err(|e| CoreError::ConfigFile {
+                detail: format!("core thread: {e}"),
             })?;
 
         Ok(Arc::new(Self {
@@ -223,25 +316,25 @@ impl Core {
     }
 }
 
-const TEMPLATE: &str = r#"# Forwards Kubeport. Un bloc [[forward]] par port-forward.
+const TEMPLATE: &str = r#"# Kubeport Forwards. One [[forward]] block per port-forward.
 #
 # [[forward]]
-# name = "postgres-staging"   # nom unique
-# context = "staging"          # contexte du kubeconfig
+# name = "postgres-staging"   # unique name
+# context = "staging"          # kubeconfig context
 # namespace = "db"
-# service = "postgres"         # ou : pod = "postgres-0"
-# remote_port = 5432           # port du Service (ou du pod)
-# local_port = 5432            # optionnel, vaut remote_port par défaut
+# service = "postgres"         # or: pod = "postgres-0"
+# remote_port = 5432           # Service (or pod) port
+# local_port = 5432            # optional, defaults to remote_port
 #
-# kubeconfig = "/chemin/vers/kubeconfig"   # optionnel, en tête de fichier
+# kubeconfig = "/path/to/kubeconfig"   # optional, at the top of the file
 "#;
 
 fn ensure_config_file(path: &Path) -> Result<(), CoreError> {
     if path.exists() {
         return Ok(());
     }
-    let io = |e: std::io::Error| CoreError::Config {
-        message: format!("{} : {e}", path.display()),
+    let io = |e: std::io::Error| CoreError::ConfigFile {
+        detail: format!("{}: {e}", path.display()),
     };
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(io)?;
@@ -249,9 +342,21 @@ fn ensure_config_file(path: &Path) -> Result<(), CoreError> {
     std::fs::write(path, TEMPLATE).map_err(io)
 }
 
-fn config_error(e: impl std::fmt::Display) -> CoreError {
-    CoreError::Config {
-        message: e.to_string(),
+fn config_error(e: ConfigError) -> CoreError {
+    match e {
+        ConfigError::DuplicateName(name) => CoreError::DuplicateName { name },
+        ConfigError::MissingField(field) => CoreError::MissingField {
+            field: match field {
+                Field::Name => FormField::Name,
+                Field::Context => FormField::Context,
+                Field::Namespace => FormField::Namespace,
+                Field::Target => FormField::Target,
+            },
+        },
+        ConfigError::PortZero => CoreError::PortZero,
+        other => CoreError::ConfigFile {
+            detail: other.to_string(),
+        },
     }
 }
 
@@ -266,7 +371,11 @@ fn run(
         .build()
     {
         Ok(rt) => rt,
-        Err(e) => return listener.notice(format!("démarrage du cœur : {e}")),
+        Err(e) => {
+            return listener.notice(Notice::CoreStartFailed {
+                detail: e.to_string(),
+            });
+        }
     };
     // Lu ici et non dans le constructeur : le shell de login peut prendre jusqu'à 5 s.
     let env = KubeEnv::from(login_shell_env());
@@ -329,19 +438,24 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
         Command::Activate(name) => match manager.activate(&name).await {
             Ok(rivals) => {
                 for rival in rivals {
-                    listener.notice(format!(
-                        "{rival} désactivé : port local partagé avec {name}"
-                    ));
+                    listener.notice(Notice::RivalDeactivated {
+                        rival,
+                        by: name.clone(),
+                    });
                 }
             }
-            Err(e) => listener.notice(e.to_string()),
+            Err(ManagerError::UnknownForward(name)) => {
+                listener.notice(Notice::UnknownForward { name })
+            }
         },
         Command::Deactivate(name) => manager.deactivate(&name),
         Command::DeactivateAll => manager.deactivate_all(),
         Command::ReconnectAll => manager.reconnect_all().await,
         Command::Reload => match Config::load(path) {
             Ok(config) => manager.replace_config(config).await,
-            Err(e) => listener.notice(format!("config non rechargée : {e}")),
+            Err(e) => listener.notice(Notice::ConfigNotReloaded {
+                detail: e.to_string(),
+            }),
         },
         Command::Contexts(reply) => {
             let _ = reply.send(manager.contexts().map_err(cluster_error));
@@ -350,7 +464,7 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
             // L'appel réseau tourne à part : la boucle continue de servir les statuts.
             Ok(client) => {
                 tokio::spawn(async move {
-                    let _ = reply.send(catalog::namespaces(client).await.map_err(cluster_error));
+                    let _ = reply.send(catalog::namespaces(client).await.map_err(list_error));
                 });
             }
             Err(e) => {
@@ -364,7 +478,7 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
                     let _ = reply.send(
                         result
                             .map(|t| t.into_iter().map(target_option).collect())
-                            .map_err(cluster_error),
+                            .map_err(list_error),
                     );
                 });
             }
@@ -442,8 +556,14 @@ async fn apply(manager: &mut Manager, path: &Path, config: Config) -> Result<(),
     Ok(())
 }
 
-fn cluster_error(message: String) -> CoreError {
-    CoreError::Cluster { message }
+fn cluster_error(reason: Reason) -> CoreError {
+    CoreError::Cluster {
+        reason: reason.into(),
+    }
+}
+
+fn list_error(detail: String) -> CoreError {
+    CoreError::ClusterList { detail }
 }
 
 fn target_option(choice: TargetChoice) -> TargetOption {
@@ -487,8 +607,12 @@ fn views(manager: &Manager, statuses: &Statuses) -> Vec<ForwardView> {
                 active: status.active,
                 state: status.real.map(|r| match r {
                     RealState::Connected { pod } => RealStateView::Connected { pod },
-                    RealState::Reconnecting(reason) => RealStateView::Reconnecting { reason },
-                    RealState::Error(reason) => RealStateView::Error { reason },
+                    RealState::Reconnecting(reason) => RealStateView::Reconnecting {
+                        reason: reason.into(),
+                    },
+                    RealState::Error(reason) => RealStateView::Error {
+                        reason: reason.into(),
+                    },
                 }),
             }
         })

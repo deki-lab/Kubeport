@@ -29,7 +29,7 @@ final class CoreModel {
     init() {
         let listener = Listener(
             onChange: { [weak self] forwards in Task { @MainActor in self?.update(forwards) } },
-            onNotice: { [weak self] message in Task { @MainActor in self?.show(message) } }
+            onNotice: { [weak self] notice in Task { @MainActor in self?.show(notice.text) } }
         )
         let env = ProcessInfo.processInfo.environment
         do {
@@ -100,7 +100,7 @@ final class CoreModel {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {
-            show("Lancement au login : \(error.localizedDescription)")
+            show(L("notice.launchAtLogin", error.localizedDescription))
         }
     }
 
@@ -128,8 +128,8 @@ final class CoreModel {
             center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
         let content = UNMutableNotificationContent()
-        content.title = "Kubeport : \(forward.name) en erreur"
-        content.body = reason
+        content.title = L("notification.errorTitle", forward.name)
+        content.body = reason.text
         center.add(UNNotificationRequest(identifier: "error-\(forward.name)", content: content, trigger: nil))
     }
 
@@ -173,25 +173,16 @@ extension ForwardView {
     }
 }
 
-/// Message lisible pour une erreur du cœur.
-func describe(_ error: Error) -> String {
-    switch error as? CoreError {
-    case .Config(let message)?, .Cluster(let message)?: return message
-    case .Stopped?: return "cœur arrêté"
-    case nil: return error.localizedDescription
-    }
-}
-
 /// Reçoit les événements du cœur, sur le thread Rust.
 private final class Listener: CoreListener, @unchecked Sendable {
     private let onChange: ([ForwardView]) -> Void
-    private let onNotice: (String) -> Void
+    private let onNotice: (Notice) -> Void
 
-    init(onChange: @escaping ([ForwardView]) -> Void, onNotice: @escaping (String) -> Void) {
+    init(onChange: @escaping ([ForwardView]) -> Void, onNotice: @escaping (Notice) -> Void) {
         self.onChange = onChange
         self.onNotice = onNotice
     }
 
     func forwardsChanged(forwards: [ForwardView]) { onChange(forwards) }
-    func notice(message: String) { onNotice(message) }
+    func notice(notice: Notice) { onNotice(notice) }
 }

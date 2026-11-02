@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use k8s_openapi::api::core::v1::{Pod, Service};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 
+use crate::state::Reason;
+
 /// Port visé dans le pod : un numéro, ou un nom de port de conteneur.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortRef {
@@ -29,26 +31,29 @@ pub struct ServiceBackend {
 /// Lit le selector du Service et traduit `remote_port` (port du Service) en port du pod.
 ///
 /// Une erreur ici demande une action humaine : le Service ne peut pas être forwardé.
-pub fn service_backend(service: &Service, remote_port: u16) -> Result<ServiceBackend, String> {
-    let spec = service.spec.as_ref().ok_or("Service sans spec")?;
+pub fn service_backend(service: &Service, remote_port: u16) -> Result<ServiceBackend, Reason> {
+    let spec = service
+        .spec
+        .as_ref()
+        .ok_or(Reason::ServiceWithoutSelector)?;
     if spec.type_.as_deref() == Some("ExternalName") {
-        return Err("Service ExternalName : aucun pod derrière".into());
+        return Err(Reason::ExternalNameService);
     }
     let selector = spec
         .selector
         .as_ref()
         .filter(|s| !s.is_empty())
-        .ok_or("Service sans selector : aucun pod derrière")?;
+        .ok_or(Reason::ServiceWithoutSelector)?;
     let service_port = spec
         .ports
         .iter()
         .flatten()
         .find(|p| p.port == i32::from(remote_port))
-        .ok_or_else(|| format!("le Service n'expose pas le port {remote_port}"))?;
+        .ok_or(Reason::PortNotExposed { port: remote_port })?;
     let port = match &service_port.target_port {
         None => PortRef::Number(remote_port),
         Some(IntOrString::Int(n)) => {
-            PortRef::Number(u16::try_from(*n).map_err(|_| format!("targetPort {n} invalide"))?)
+            PortRef::Number(u16::try_from(*n).map_err(|_| Reason::InvalidTargetPort { value: *n })?)
         }
         Some(IntOrString::String(name)) => PortRef::Name(name.clone()),
     };
@@ -288,22 +293,23 @@ mod tests {
     #[test]
     fn service_sans_pods_est_refuse() {
         let external = service(Some("ExternalName"), &[("a", "b")], vec![sport(80, None)]);
-        assert!(
-            service_backend(&external, 80)
-                .unwrap_err()
-                .contains("ExternalName")
+        assert_eq!(
+            service_backend(&external, 80).unwrap_err(),
+            Reason::ExternalNameService
         );
         let no_selector = service(None, &[], vec![sport(80, None)]);
-        assert!(
-            service_backend(&no_selector, 80)
-                .unwrap_err()
-                .contains("sans selector")
+        assert_eq!(
+            service_backend(&no_selector, 80).unwrap_err(),
+            Reason::ServiceWithoutSelector
         );
     }
 
     #[test]
     fn port_absent_du_service_est_refuse() {
         let svc = service(None, &[("a", "b")], vec![sport(80, None)]);
-        assert!(service_backend(&svc, 5432).unwrap_err().contains("5432"));
+        assert_eq!(
+            service_backend(&svc, 5432).unwrap_err(),
+            Reason::PortNotExposed { port: 5432 }
+        );
     }
 }

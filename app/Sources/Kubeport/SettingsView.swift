@@ -11,20 +11,20 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Réglages").font(.headline)
+            Text(L("settings.title")).font(.headline)
 
-            Toggle("Lancer Kubeport à l'ouverture de session", isOn: Binding(
+            Toggle(L("settings.launchAtLogin"), isOn: Binding(
                 get: { launchAtLogin },
                 set: { model.setLaunchAtLogin($0); launchAtLogin = model.launchAtLogin }
             ))
             if model.launchAtLoginNeedsApproval {
-                Text("À autoriser dans Réglages Système > Général > Ouverture.")
+                Text(L("settings.needsApproval"))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Kubeconfig")
-                TextField("Défaut : KUBECONFIG du shell, puis ~/.kube/config", text: $kubeconfig)
+                Text(L("settings.kubeconfig"))
+                TextField(L("settings.kubeconfigPlaceholder"), text: $kubeconfig)
                     .textFieldStyle(.roundedBorder)
             }
 
@@ -34,8 +34,8 @@ struct SettingsView: View {
 
             HStack {
                 Spacer()
-                Button("Fermer", action: close).keyboardShortcut(.cancelAction)
-                Button("Enregistrer", action: save).keyboardShortcut(.defaultAction)
+                Button(L("settings.close"), action: close).keyboardShortcut(.cancelAction)
+                Button(L("settings.save"), action: save).keyboardShortcut(.defaultAction)
             }
         }
         .padding(12)

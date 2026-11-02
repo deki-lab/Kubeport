@@ -47,3 +47,8 @@ _Avoid_: retry, failover
 **Erreur**:
 État réel d'un Forward Actif bloqué par une cause qui demande une action humaine (port local occupé, authentification refusée, Cible ou namespace introuvable, Contexte absent) ; aucune nouvelle tentative automatique.
 _Avoid_: échec, crash
+
+## Interface en anglais
+
+L'app suit la langue de macOS (anglais par défaut). Termes affichés en anglais :
+Forward, Target (Cible), Context (Contexte), Resolved pod (Pod résolu), Active / Inactive (Actif / Inactif), Connected / Reconnecting / Error (Connecté / Reconnexion / Erreur).

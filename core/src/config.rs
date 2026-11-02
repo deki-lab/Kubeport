@@ -45,23 +45,45 @@ pub struct Config {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
-    #[error("lecture de {path} : {source}")]
+    #[error("reading {path}: {source}")]
     Io {
         path: PathBuf,
         source: std::io::Error,
     },
-    #[error("config invalide : {0}")]
+    #[error("invalid config: {0}")]
     Parse(#[from] toml::de::Error),
-    #[error("écriture de la config : {0}")]
+    #[error("writing the config: {0}")]
     Serialize(#[from] toml::ser::Error),
-    #[error("deux Forwards portent le nom « {0} »")]
+    #[error("two Forwards are named {0:?}")]
     DuplicateName(String),
-    #[error("{0}")]
-    Invalid(String),
+    #[error("{0} is missing")]
+    MissingField(Field),
+    #[error("port 0 is not allowed")]
+    PortZero,
+}
+
+/// Champ obligatoire d'un Forward.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Field {
+    Name,
+    Context,
+    Namespace,
+    Target,
+}
+
+impl std::fmt::Display for Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Field::Name => "name",
+            Field::Context => "context",
+            Field::Namespace => "namespace",
+            Field::Target => "target",
+        })
+    }
 }
 
 /// En-tête écrit en tête du fichier quand l'app l'enregistre.
-const HEADER: &str = "# Forwards Kubeport : modifiables ici ou depuis l'app (Recharger après une édition).\n# Un bloc [[forward]] par port-forward ; `service` ou `pod`, pas les deux.\n\n";
+const HEADER: &str = "# Kubeport Forwards: edit here or in the app (click Reload after editing this file).\n# One [[forward]] block per port-forward; `service` or `pod`, not both.\n\n";
 
 /// Écrit dans un fichier temporaire puis renomme : jamais de fichier à moitié écrit.
 pub(crate) fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
@@ -161,18 +183,18 @@ fn validate(forward: &Forward) -> Result<(), ConfigError> {
         Target::Service(n) | Target::Pod(n) => n,
     };
     let missing = [
-        ("nom", &forward.name),
-        ("contexte", &forward.context),
-        ("namespace", &forward.namespace),
-        ("cible", target),
+        (Field::Name, &forward.name),
+        (Field::Context, &forward.context),
+        (Field::Namespace, &forward.namespace),
+        (Field::Target, target),
     ]
     .into_iter()
     .find(|(_, v)| v.trim().is_empty());
     if let Some((field, _)) = missing {
-        return Err(ConfigError::Invalid(format!("{field} manquant")));
+        return Err(ConfigError::MissingField(field));
     }
     if forward.remote_port == 0 || forward.local_port == 0 {
-        return Err(ConfigError::Invalid("le port 0 est interdit".into()));
+        return Err(ConfigError::PortZero);
     }
     Ok(())
 }
@@ -202,13 +224,13 @@ impl TryFrom<RawForward> for Forward {
             (None, Some(pod)) => Target::Pod(pod),
             _ => {
                 return Err(format!(
-                    "Forward « {} » : indiquer soit `service`, soit `pod`",
+                    "Forward {:?}: set either `service` or `pod`",
                     raw.name
                 ));
             }
         };
         if raw.remote_port == 0 || raw.local_port == Some(0) {
-            return Err(format!("Forward « {} » : le port 0 est interdit", raw.name));
+            return Err(format!("Forward {:?}: port 0 is not allowed", raw.name));
         }
         Ok(Forward {
             local_port: raw.local_port.unwrap_or(raw.remote_port),
@@ -297,7 +319,7 @@ pod = "p"
 remote_port = 80
 "#;
         let err = Config::parse(text).unwrap_err().to_string();
-        assert!(err.contains("soit `service`, soit `pod`"), "{err}");
+        assert!(err.contains("either `service` or `pod`"), "{err}");
     }
 
     #[test]
@@ -338,7 +360,7 @@ remote_port = 80
         pg.name = " ".into();
         assert!(matches!(
             config.upsert(None, pg),
-            Err(ConfigError::Invalid(_))
+            Err(ConfigError::MissingField(Field::Name))
         ));
     }
 
@@ -350,7 +372,7 @@ remote_port = 80
         config.remove("redis-0");
         config.save(&path).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(text.starts_with("# Forwards Kubeport"));
+        assert!(text.starts_with("# Kubeport Forwards"));
         assert_eq!(Config::load(&path).unwrap(), config);
         std::fs::remove_dir_all(dir).unwrap();
     }

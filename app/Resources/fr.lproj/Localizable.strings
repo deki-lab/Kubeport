@@ -1,0 +1,88 @@
+/* Kubeport — français. Clés vérifiées par scripts/check-l10n.py. Vocabulaire : GLOSSARY.md. */
+
+/* Panneau */
+"panel.empty" = "Aucun Forward.\nCrée-en un avec « Nouveau Forward ».";
+"menu.edit" = "Modifier…";
+"menu.duplicate" = "Dupliquer…";
+"row.reconnecting" = "Reconnexion : %1$@";
+"row.error" = "Erreur : %1$@";
+"row.local" = "localhost:%1$@";
+"tooltip.target" = "localhost:%1$@ → %2$@/%3$@:%4$@";
+"tooltip.resolvedPod" = "Pod résolu : %1$@";
+"tooltip.hint" = "Clic droit : modifier, dupliquer";
+"footer.new" = "Nouveau Forward";
+"footer.deactivateAll" = "Tout désactiver";
+"footer.openConfig" = "Ouvrir la config";
+"footer.reload" = "Recharger";
+"footer.settings" = "Réglages";
+"footer.quit" = "Quitter Kubeport";
+
+/* Formulaire */
+"form.title.create" = "Nouveau Forward";
+"form.title.edit" = "Modifier le Forward";
+"form.title.duplicate" = "Dupliquer le Forward";
+"form.context" = "Contexte";
+"form.namespace" = "Namespace";
+"form.type" = "Type";
+"form.service" = "Service";
+"form.pod" = "Pod";
+"form.target" = "Cible";
+"form.remotePort" = "Port distant";
+"form.localPort" = "Port local";
+"form.name" = "Nom";
+"form.delete" = "Supprimer";
+"form.confirmDelete" = "Confirmer la suppression";
+"form.cancel" = "Annuler";
+"form.save" = "Enregistrer";
+"form.namespacesUnavailable" = "Namespaces non listés (%1$@) : saisie libre.";
+"form.targetsUnavailable" = "Cibles non listées (%1$@) : saisie libre.";
+"form.copyName" = "%1$@-copie";
+
+/* Réglages */
+"settings.title" = "Réglages";
+"settings.launchAtLogin" = "Lancer Kubeport à l'ouverture de session";
+"settings.needsApproval" = "À autoriser dans Réglages Système > Général > Ouverture.";
+"settings.kubeconfig" = "Kubeconfig";
+"settings.kubeconfigPlaceholder" = "Défaut : KUBECONFIG du shell, puis ~/.kube/config";
+"settings.close" = "Fermer";
+"settings.save" = "Enregistrer";
+
+/* Notifications et messages */
+"notification.errorTitle" = "Kubeport : %1$@ en erreur";
+"notice.launchAtLogin" = "Lancement à l'ouverture de session : %1$@";
+"notice.rivalDeactivated" = "%1$@ désactivé : port local partagé avec %2$@";
+"notice.unknownForward" = "Aucun Forward nommé %1$@";
+"notice.configNotReloaded" = "Config non rechargée : %1$@";
+"notice.coreStartFailed" = "Le cœur de Kubeport n'a pas démarré : %1$@";
+
+/* Erreurs */
+"error.duplicateName" = "Un Forward nommé « %1$@ » existe déjà.";
+"error.missingField" = "Champ requis : %1$@.";
+"error.portZero" = "Le port 0 est interdit.";
+"error.configFile" = "Fichier de config : %1$@";
+"error.clusterList" = "Cluster : %1$@";
+"error.stopped" = "Le cœur de Kubeport est arrêté.";
+
+/* Causes (Reconnexion / Erreur) */
+"reason.connectingToCluster" = "connexion au cluster";
+"reason.searchingPod" = "recherche d'un pod Ready";
+"reason.noReadyPod" = "aucun pod Ready";
+"reason.podNotReady" = "pod %1$@ introuvable ou pas Ready";
+"reason.apiUnreachable" = "API injoignable : %1$@";
+"reason.apiError" = "erreur API %1$@ : %2$@";
+"reason.portInUse" = "port %1$@ occupé";
+"reason.portUnavailable" = "port %1$@ : %2$@";
+"reason.authFailed" = "authentification refusée : %1$@";
+"reason.accessDenied" = "accès refusé : %1$@";
+"reason.notFound" = "introuvable : %1$@";
+"reason.serviceNotFound" = "Service %1$@/%2$@ introuvable";
+"reason.externalNameService" = "Service ExternalName : aucun pod derrière";
+"reason.serviceWithoutSelector" = "Service sans selector : aucun pod derrière";
+"reason.portNotExposed" = "le Service n'expose pas le port %1$@";
+"reason.invalidTargetPort" = "targetPort %1$@ invalide";
+"reason.contextMissing" = "Contexte %1$@ absent du kubeconfig";
+"reason.kubeconfig" = "kubeconfig : %1$@";
+
+/* Icône de la barre de menu (VoiceOver) */
+"icon.label" = "Kubeport";
+"icon.labelError" = "Kubeport : erreur";
