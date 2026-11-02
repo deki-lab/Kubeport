@@ -20,6 +20,7 @@ BIN_DIR="$(swift build -c release --arch arm64 --package-path "$ROOT/app" --show
 cp "$BIN_DIR/Kubeport" "$APP/Contents/MacOS/Kubeport"
 cp "$ROOT/app/Info.plist" "$APP/Contents/Info.plist"
 cp -R "$ROOT/app/Resources/"*.lproj "$APP/Contents/Resources/"
+cp "$ROOT/app/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
 

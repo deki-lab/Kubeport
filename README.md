@@ -1,3 +1,5 @@
+<p align="center"><img src="packaging/icon/AppIcon.svg" width="128" alt="Kubeport icon"></p>
+
 # Kubeport
 
 [![Release](https://img.shields.io/github/v/release/deki-lab/k8s_forwarder)](https://github.com/deki-lab/k8s_forwarder/releases/latest)
