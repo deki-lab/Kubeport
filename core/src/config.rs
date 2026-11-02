@@ -26,6 +26,22 @@ pub enum Target {
     Pod(String),
 }
 
+/// Whole minutes in a duration, rounded up (an Idle timeout is set in minutes).
+pub fn minutes(duration: Duration) -> u32 {
+    u32::try_from(duration.as_secs().div_ceil(60)).unwrap_or(u32::MAX)
+}
+
+impl IdleTimeout {
+    /// From a number of minutes: 0 means never.
+    pub fn from_minutes(minutes: u32) -> Self {
+        if minutes == 0 {
+            Self::Never
+        } else {
+            Self::After(Duration::from_secs(u64::from(minutes) * 60))
+        }
+    }
+}
+
 /// A Forward's own Idle timeout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IdleTimeout {
@@ -106,6 +122,21 @@ impl std::fmt::Display for Field {
     }
 }
 
+/// Content of a config file created on first launch.
+const TEMPLATE: &str = r#"# Kubeport Forwards. One [[forward]] block per port-forward.
+#
+# idle_timeout = 60              # optional: default Idle timeout in minutes
+#
+# [[forward]]
+# name = "postgres-staging"      # unique name
+# context = "staging"            # kubeconfig context
+# namespace = "db"
+# service = "postgres"           # or: pod = "postgres-0"
+# remote_port = 5432             # Service (or pod) port
+# local_port = 5432              # optional, defaults to remote_port
+# idle_timeout = "never"         # optional: minutes, or "never"
+"#;
+
 /// Header written at the top of the file when the app saves it.
 const HEADER: &str = "# Kubeport Forwards: edit here or in the app (click Reload after editing this file).\n# One [[forward]] block per port-forward; `service` or `pod`, not both.\n\n";
 
@@ -137,6 +168,17 @@ impl Config {
             }
         }
         Ok(config)
+    }
+
+    /// Loads the config, creating the file with a commented example when it is missing.
+    pub fn load_or_create(path: &Path) -> Result<Self, ConfigError> {
+        if !path.exists() {
+            write_atomic(path, TEMPLATE).map_err(|source| ConfigError::Io {
+                path: path.to_owned(),
+                source,
+            })?;
+        }
+        Self::load(path)
     }
 
     /// Loads the config; a missing file gives an empty config.
@@ -280,8 +322,7 @@ impl TryFrom<RawForward> for Forward {
         }
         let idle_timeout = match raw.idle_timeout {
             None => IdleTimeout::Inherit,
-            Some(RawIdle::Minutes(0)) => IdleTimeout::Never,
-            Some(RawIdle::Minutes(m)) => IdleTimeout::After(Duration::from_secs(u64::from(m) * 60)),
+            Some(RawIdle::Minutes(m)) => IdleTimeout::from_minutes(m),
             Some(RawIdle::Keyword(k)) if k == "never" => IdleTimeout::Never,
             Some(RawIdle::Keyword(k)) => {
                 return Err(format!(
@@ -311,9 +352,7 @@ impl From<Forward> for RawForward {
         let idle_timeout = match f.idle_timeout {
             IdleTimeout::Inherit => None,
             IdleTimeout::Never => Some(RawIdle::Keyword("never".into())),
-            IdleTimeout::After(d) => Some(RawIdle::Minutes(
-                u32::try_from(d.as_secs().div_ceil(60)).unwrap_or(u32::MAX),
-            )),
+            IdleTimeout::After(d) => Some(RawIdle::Minutes(minutes(d))),
         };
         RawForward {
             idle_timeout,

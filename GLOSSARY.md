@@ -22,6 +22,14 @@ _Avoid_: cluster, environment
 How long an Active Forward can go without any open connection before it turns Inactive on its own; set as a default and overridable per Forward ("Never" allowed).
 _Avoid_: timeout, auto-disconnect, expiration
 
+**Master switch**:
+The single switch that turns every Forward off and later brings the same set back on.
+_Avoid_: kill switch, global toggle
+
+**Session**:
+What Kubeport keeps between launches: the Active Forwards, and the set the Master switch will bring back.
+_Avoid_: state, workspace, profile
+
 **Competing Forwards**:
 Forwards that share the same local port; at most one of them is Active at a time.
 _Avoid_: port conflict, duplicate

@@ -13,5 +13,6 @@ pub mod state;
 
 pub use config::{Config, ConfigError, Field, Forward, IdleTimeout, Target};
 pub use manager::{KubeEnv, Manager, ManagerError, Statuses};
+pub use session::{Notice, Session};
 pub use shell_env::{ShellEnv, login_shell_env};
 pub use state::{ForwardStatus, RealState, Reason};
