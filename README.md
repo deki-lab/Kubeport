@@ -1,72 +1,83 @@
 # Kubeport
 
-Kubernetes port-forwards from the macOS menu bar. Configure a Forward once, turn it on with one click, and it automatically follows the pods behind a Service (rollouts included).
+[![Release](https://img.shields.io/github/v/release/deki-lab/k8s_forwarder)](https://github.com/deki-lab/k8s_forwarder/releases/latest)
+[![CI](https://github.com/deki-lab/k8s_forwarder/actions/workflows/ci.yml/badge.svg)](https://github.com/deki-lab/k8s_forwarder/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20Silicon-lightgrey)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/lideke)
 
-- Vocabulary: [GLOSSARY.md](GLOSSARY.md)
-- Architecture decisions: [docs/adr/](docs/adr/)
+Kubernetes port-forwards from the macOS menu bar.
 
-## Installation
+Set up a Forward once, turn it on with a switch, and forget about it: Kubeport follows the pods behind a Service, so a rollout or a crashed pod no longer breaks your `localhost` connection.
+
+## Features
+
+- **Lives in the menu bar**, in the style of the macOS Wi-Fi menu. No Dock icon, no window to manage.
+- **Survives rollouts.** Target a Service: new connections move to another Ready pod as soon as the current one stops being Ready. `kubectl port-forward svc/…` dies with its pod.
+- **One switch per Forward**, plus a master switch that turns everything off and back on.
+- **Guided setup**: Context, namespace, Service or Pod and ports are listed from your cluster.
+- **Auto-deactivate**: an unused Forward turns itself off after an idle timeout you choose.
+- **Works with any kubeconfig**, including `exec` auth plugins (EKS, GKE, AKS, kubelogin). No `kubectl` needed.
+- **Light**: about 17 MB of memory with 5 active Forwards.
+- **English and French**, light and dark mode, following macOS.
+
+## Install
 
 ```sh
 brew install --cask deki-lab/tap/kubeport
 ```
 
-The app is not yet signed with an Apple Developer ID nor notarized. macOS blocks it on first launch:
+Or download the `.dmg` from the [latest release](https://github.com/deki-lab/k8s_forwarder/releases/latest).
 
-1. Launch Kubeport once, then dismiss the alert.
-2. Open **System Settings > Privacy & Security**.
-3. At the bottom, click **Open Anyway** next to Kubeport, then confirm.
+Requirements: macOS 14 or later, Apple Silicon.
 
-Requirements: macOS 14 or later, Apple Silicon Mac.
+The app is not signed with an Apple Developer ID yet, so macOS blocks it the first time:
+
+1. Open Kubeport once, then close the alert.
+2. Go to **System Settings › Privacy & Security**.
+3. Click **Open Anyway** next to Kubeport, then confirm.
 
 ## Usage
 
-The UI follows the macOS language: English or French (English for any other language).
+Click the Kubeport icon in the menu bar.
 
-The panel looks like the macOS Wi-Fi menu:
+- **New Forward…** creates a Forward: pick the Context, namespace, Service or Pod and remote port; the local port and the name are filled in for you.
+- The **switch** on a row turns that Forward on or off. Click the row itself for details: Target, Resolved pod, address (with Copy), **Edit…** and **Duplicate…**.
+- Active Forwards are listed first, grouped by Context · namespace. **Inactive Forwards ›** shows the others.
+- The **Kubeport** switch at the top turns every Forward off, and brings the same ones back.
+- **Kubeport Settings…**: open at login, default idle timeout, kubeconfig file, config file, quit.
 
-- The **Kubeport** switch at the top turns every Forward off, and turns the same ones back on.
-- Active Forwards are listed first, grouped by Context · namespace; **Inactive Forwards ›** expands the others. The list scrolls past 440 pt.
-- Each row has its own **switch**. Click the row for its details (Target, Resolved pod, address with Copy) and **Edit…** / **Duplicate…** (an Active Forward is restarted when edited).
-- **New Forward…**: Context, namespace, Service or Pod, and ports are suggested from the cluster.
-- **Kubeport Settings…**: open at login, default Idle timeout, forced kubeconfig, open or reload the config file, quit.
-- Forwards that are Active when the app quits are reactivated on next launch.
-- **Auto-deactivate**: an Active Forward with no open connection for the Idle timeout (in Settings, or per Forward: never, 15 min, 1 h, 4 h) turns Inactive on its own. In `config.toml`: `idle_timeout = 60` (minutes) at the top of the file or inside a `[[forward]]`, `"never"` to disable.
-- Files, in `~/Library/Application Support/k8s_forwarder/`:
-  - `config.toml`: the Forwards, hand-editable (then **Reload Config** in Settings). The app rewrites the file when you edit from the UI: hand-written comments are lost.
-  - `state.toml`: Active Forwards, managed by the app.
+Forwards that are on when you quit come back on at next launch. They listen on `127.0.0.1` only.
 
-## Development
+### Configuration file
 
-Requirements: stable Rust, Xcode (for `xcodebuild -create-xcframework`).
+Forwards are stored in `~/Library/Application Support/k8s_forwarder/config.toml`. You can edit it by hand, then use **Reload Config** in Settings:
 
-```sh
-cargo test --all                 # Rust core and FFI bridge
-cargo test -p kubeport-ffi -- --ignored   # form against docker-desktop
-cargo run -p kubeport-cli        # development CLI
-./scripts/build-ffi.sh           # Rust core → app/KubeportFFI.xcframework + Swift bindings
-./scripts/build-app.sh           # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg
-./scripts/measure-footprint.sh   # memory footprint of the running app (budget: 35 MB)
-./scripts/rollout-test.sh        # end to end on docker-desktop: rollout without downtime
-python3 scripts/check-l10n.py      # translations: missing keys, unused keys, placeholders
+```toml
+idle_timeout = 60              # optional: default idle timeout in minutes
+
+[[forward]]
+name = "postgres-staging"
+context = "staging"            # kubeconfig context
+namespace = "db"
+service = "postgres"           # or: pod = "postgres-0"
+remote_port = 5432
+local_port = 5432              # optional, defaults to remote_port
+idle_timeout = "never"         # optional: minutes, or "never"
 ```
 
-Useful variables to run the app during development:
+Editing from the app rewrites this file, so comments you add by hand are not kept.
 
-```sh
-KUBEPORT_CONFIG=tests/fixtures/config.toml KUBEPORT_ACTIVATE=whoami \
-  dist/Kubeport.app/Contents/MacOS/Kubeport
-```
+## Support
 
-## Development CLI
+If Kubeport saves you a few `kubectl port-forward` restarts, you can [buy me a coffee](https://www.buymeacoffee.com/lideke).
 
-```sh
-cargo run -p kubeport-cli -- --config tests/fixtures/config.toml list
-cargo run -p kubeport-cli -- --config tests/fixtures/config.toml up whoami
-```
+Bugs and ideas: [open an issue](https://github.com/deki-lab/k8s_forwarder/issues).
 
-Config format: see `core/src/config.rs`.
+## Contributing
 
-## Releases
+See [CONTRIBUTING.md](CONTRIBUTING.md) for building from source, tests and conventions.
 
-Versions are managed by [release-please](https://github.com/googleapis/release-please): squash merge only, PR titles in [Conventional Commits](https://www.conventionalcommits.org/) format (`feat: …`, `fix: …`). Merging the release PR creates the tag, builds the `.dmg`, attaches it to the release, and updates the tap's cask when `HOMEBREW_TAP_ENABLED` is `true`.
+## License
+
+[MIT](LICENSE)
