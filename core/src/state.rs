@@ -77,6 +77,9 @@ pub enum RealState {
 pub struct ForwardStatus {
     pub active: bool,
     pub real: Option<RealState>,
+    /// Moment où le Délai d'inactivité passera ce Forward Inactif, si aucune connexion
+    /// n'est ouverte d'ici là.
+    pub idle_deadline: Option<std::time::SystemTime>,
 }
 
 impl fmt::Display for RealState {

@@ -47,6 +47,7 @@ fn input(name: &str, context: &str, local_port: u16) -> ForwardInput {
         target_name: "whoami".into(),
         remote_port: 8080,
         local_port,
+        idle_timeout: kubeport_ffi::IdleTimeoutView::Inherit,
     }
 }
 

@@ -27,6 +27,7 @@ L'interface suit la langue de macOS : français ou anglais (anglais pour les aut
 - Clic droit sur un Forward : **Modifier** (un Forward Actif est relancé) ou **Dupliquer**.
 - **Réglages** (roue dentée) : lancement à l'ouverture de session, kubeconfig forcé.
 - Les Forwards Actifs à la fermeture sont réactivés au lancement suivant.
+- **Désactivation auto** : un Forward Actif sans connexion ouverte pendant le Délai d'inactivité (Réglages, ou par Forward : jamais, 15 min, 1 h, 4 h) passe Inactif de lui-même. Dans `config.toml` : `idle_timeout = 60` (minutes) en tête de fichier ou dans un `[[forward]]`, `"never"` pour jamais.
 - Fichiers, dans `~/Library/Application Support/k8s_forwarder/` :
   - `config.toml` : les Forwards, éditable à la main (bouton **Recharger** ensuite). L'app réécrit le fichier quand on l'édite depuis l'interface : les commentaires ajoutés à la main sont perdus.
   - `state.toml` : Forwards Actifs, géré par l'app.

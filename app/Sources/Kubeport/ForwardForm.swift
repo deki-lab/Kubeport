@@ -23,6 +23,8 @@ struct ForwardForm: View {
     @State private var remotePort = ""
     @State private var localPort = ""
     @State private var localEdited = false
+    @State private var idleTimeout: IdleTimeoutView = .inherit
+    @State private var defaultIdle: UInt32?
 
     @State private var contexts: [String] = []
     @State private var namespaces: [String] = []
@@ -79,6 +81,13 @@ struct ForwardForm: View {
                     get: { localPort },
                     set: { localPort = $0; localEdited = true }
                 ))
+                Picker(L("form.idleTimeout"), selection: $idleTimeout) {
+                    Text(L("idle.inherit", idleDefaultLabel(defaultIdle))).tag(IdleTimeoutView.inherit)
+                    Text(L("idle.never")).tag(IdleTimeoutView.never)
+                    ForEach(idleChoices, id: \.self) { minutes in
+                        Text(idleDuration(minutes)).tag(IdleTimeoutView.minutes(minutes: minutes))
+                    }
+                }
                 TextField(L("form.name"), text: Binding(
                     get: { name },
                     set: { name = $0; nameEdited = true }
@@ -150,7 +159,9 @@ struct ForwardForm: View {
             remotePort = String(source.remotePort)
             localPort = String(source.localPort)
             localEdited = true
+            idleTimeout = source.idleTimeout
         }
+        defaultIdle = try? await model.defaultIdleTimeout()
         do {
             contexts = try await model.contexts()
             if context.isEmpty { context = contexts.first ?? "" }
@@ -210,7 +221,7 @@ struct ForwardForm: View {
         guard let remote = UInt16(remotePort), let local = UInt16(localPort) else { return }
         let input = ForwardInput(
             name: name, context: context, namespace: namespace, targetKind: kind,
-            targetName: targetName, remotePort: remote, localPort: local
+            targetName: targetName, remotePort: remote, localPort: local, idleTimeout: idleTimeout
         )
         let previous: String? = if case .edit(let f) = mode { f.name } else { nil }
         saving = true

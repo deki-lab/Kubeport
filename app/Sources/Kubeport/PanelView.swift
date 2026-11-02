@@ -155,6 +155,7 @@ private struct ForwardRow: View {
         var lines = [L("tooltip.target",
                        String(forward.localPort), kind, forward.targetName, String(forward.remotePort))]
         if case .connected(let pod)? = forward.state { lines.append(L("tooltip.resolvedPod", pod)) }
+        if let countdown = forward.idleCountdown { lines.append(countdown) }
         lines.append(L("tooltip.hint"))
         return lines.joined(separator: "\n")
     }
