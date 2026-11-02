@@ -10,5 +10,5 @@ L'interface est une app SwiftUI `MenuBarExtra` ; toute la logique Kubernetes (ku
 
 ## Consequences
 
-- Le cœur ne fait aucun polling : un seul watch d'EndpointSlices par Forward Actif, aucun watch pour les Forwards Inactifs, runtime tokio `current_thread`.
+- Le cœur ne fait aucun polling : un seul watch de pods (filtré sur la Cible) par Forward Actif, aucun watch pour les Forwards Inactifs, runtime tokio `current_thread`.
 - L'API exposée par UniFFI est la frontière : Swift ne connaît que les Forwards, leur État voulu et leur État réel, jamais `kube-rs`.
