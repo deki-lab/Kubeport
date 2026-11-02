@@ -25,12 +25,18 @@ jobs:
       - run: cargo test --all
 
   app:
-    runs-on: macos-15
+    # Jamais de code de fork sur une machine perso.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # Runners auto-hébergés (Mac du mainteneur) tant que le dépôt est privé : GitHub annule
+    # les jobs macos-15 arm64 faute de capacité. Revenir à `macos-15` avant le passage en public.
+    runs-on: [self-hosted, macOS, ARM64, kubeport]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        # Sur le Mac du mainteneur, on garde son rustup tel quel.
+        if: runner.environment == 'github-hosted'
         with:
           toolchain: stable
       - run: ./scripts/build-app.sh
