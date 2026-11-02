@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use kubeport_core::{Config, Manager, Target};
+use kubeport_core::{Config, Notice, Session, Target};
 
 #[derive(Parser)]
 #[command(
@@ -65,11 +65,16 @@ async fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        Command::Up { names } => up(config, cli.kubeconfig, names).await,
+        Command::Up { names } => up(config, path, cli.kubeconfig, names).await,
     }
 }
 
-async fn up(config: Config, kubeconfig: Option<PathBuf>, names: Vec<String>) -> ExitCode {
+async fn up(
+    config: Config,
+    path: PathBuf,
+    kubeconfig: Option<PathBuf>,
+    names: Vec<String>,
+) -> ExitCode {
     let names = if names.is_empty() {
         config.forwards.iter().map(|f| f.name.clone()).collect()
     } else {
@@ -79,21 +84,16 @@ async fn up(config: Config, kubeconfig: Option<PathBuf>, names: Vec<String>) -> 
         kubeconfig: kubeconfig.into_iter().collect(),
         exec_path: None,
     };
-    let mut manager = Manager::new(config, env);
-    let mut expired = manager.take_expired().expect("expiry receiver taken once");
-    let mut statuses = manager.subscribe();
+    let mut session = Session::new(config, path, env).ephemeral();
+    let mut statuses = session.statuses();
 
     for name in &names {
-        match manager.activate(name).await {
-            Ok(rivals) => {
-                for rival in rivals {
-                    println!("{rival} deactivated (local port shared with {name})");
-                }
-            }
-            Err(e) => {
-                eprintln!("{e}");
+        for notice in session.activate(name).await {
+            if let Notice::UnknownForward { name } = &notice {
+                eprintln!("no Forward named {name:?}");
                 return ExitCode::FAILURE;
             }
+            print_notice(&notice);
         }
     }
 
@@ -102,10 +102,7 @@ async fn up(config: Config, kubeconfig: Option<PathBuf>, names: Vec<String>) -> 
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => break,
-            Some(name) = expired.recv() => {
-                manager.deactivate(&name);
-                println!("{name:<24} deactivated: idle timeout reached");
-            }
+            Some(notice) = session.next_expiry() => print_notice(&notice),
             changed = statuses.changed() => {
                 if changed.is_err() {
                     break;
@@ -116,8 +113,21 @@ async fn up(config: Config, kubeconfig: Option<PathBuf>, names: Vec<String>) -> 
             }
         }
     }
-    manager.deactivate_all();
+    session.set_all(false).await;
     ExitCode::SUCCESS
+}
+
+fn print_notice(notice: &Notice) {
+    match notice {
+        Notice::RivalDeactivated { rival, by } => {
+            println!("{rival} deactivated (local port shared with {by})")
+        }
+        Notice::IdleDeactivated { name, minutes } => {
+            println!("{name:<24} deactivated: no connection for {minutes} min")
+        }
+        Notice::UnknownForward { name } => println!("no Forward named {name:?}"),
+        Notice::ConfigNotReloaded { detail } => println!("config not reloaded: {detail}"),
+    }
 }
 
 fn print_changes(before: &kubeport_core::Statuses, after: &kubeport_core::Statuses) {

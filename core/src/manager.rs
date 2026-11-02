@@ -146,19 +146,48 @@ impl Manager {
     /// Replaces the config (hand-edited file). Active Forwards left unchanged are
     /// restarted; deleted or modified ones become Inactive.
     pub async fn replace_config(&mut self, config: Config) {
-        let keep: Vec<String> = self
-            .running
-            .keys()
-            .filter(|name| config.get(name) == self.config.get(name))
-            .cloned()
-            .collect();
-        self.stop_all().await;
-        self.clients.clear();
-        self.status.send_replace(initial_statuses(&config));
+        // Only what changed is touched: other Active Forwards keep their connections.
+        // A new kubeconfig invalidates every client, so everything restarts then.
+        let new_kubeconfig = config.kubeconfig != self.config.kubeconfig;
+        let mut running: Vec<String> = self.running.keys().cloned().collect();
+        running.sort();
+        let mut restart = Vec::new();
+        for name in running {
+            let old = self.config.get(&name);
+            let new = config.get(&name);
+            let unchanged = new.is_some() && old == new;
+            let idle_changed = unchanged
+                && self.config.idle_timeout(old.unwrap()) != config.idle_timeout(new.unwrap());
+            if unchanged && !new_kubeconfig && !idle_changed {
+                continue;
+            }
+            if let Some(task) = self.stop(&name) {
+                let _ = task.await;
+            }
+            if unchanged {
+                restart.push(name);
+            }
+        }
+        if new_kubeconfig {
+            self.clients.clear();
+        }
+        self.status.send_modify(|statuses| {
+            statuses.retain(|name, _| config.get(name).is_some());
+            for forward in &config.forwards {
+                statuses.entry(forward.name.clone()).or_default();
+            }
+        });
         self.config = config;
-        for name in keep {
+        for name in restart {
             let _ = self.activate(&name).await;
         }
+    }
+
+    /// Names of the Active Forwards, sorted.
+    pub fn active(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.running.keys().cloned().collect();
+        names.sort();
+        names
     }
 
     /// Stops every Active Forward, waits for them to finish, returns their names.

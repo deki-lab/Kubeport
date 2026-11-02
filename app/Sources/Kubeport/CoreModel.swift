@@ -20,8 +20,8 @@ final class CoreModel {
     private(set) var startError: String?
     /// False until the core sends its first list: avoids a false empty state at launch.
     private(set) var hasLoaded = false
-    /// Forwards to re-activate when the master switch is turned back on.
-    private(set) var remembered: [String] = UserDefaults.standard.stringArray(forKey: "rememberedActive") ?? []
+    /// The master switch can turn a remembered set back on (kept by the core).
+    private(set) var canRestore = false
     /// "Inactive Forwards" section expanded; remembered between openings.
     var inactiveExpanded: Bool = UserDefaults.standard.bool(forKey: "inactiveExpanded") {
         didSet { UserDefaults.standard.set(inactiveExpanded, forKey: "inactiveExpanded") }
@@ -46,7 +46,9 @@ final class CoreModel {
     /// Starts the core; on failure (unreadable config) keeps the error for the panel.
     private func start() {
         let listener = Listener(
-            onChange: { [weak self] forwards in Task { @MainActor in self?.update(forwards) } },
+            onChange: { [weak self] forwards, canRestore in
+                Task { @MainActor in self?.update(forwards, canRestore: canRestore) }
+            },
             onNotice: { [weak self] notice in Task { @MainActor in self?.show(notice.text) } }
         )
         do {
@@ -92,24 +94,10 @@ final class CoreModel {
     // MARK: Master switch
 
     var masterOn: Bool { forwards.contains(where: \.active) }
-    var masterEnabled: Bool { masterOn || !remembered.isEmpty }
+    var masterEnabled: Bool { masterOn || canRestore }
 
-    /// Off: deactivate everything and remember what was Active. On: bring that set back.
-    func setMaster(_ on: Bool) {
-        if on {
-            let known = Set(forwards.map(\.name))
-            for name in remembered where known.contains(name) { core?.activate(name: name) }
-            setRemembered([])
-        } else {
-            setRemembered(forwards.filter(\.active).map(\.name))
-            core?.deactivateAll()
-        }
-    }
-
-    private func setRemembered(_ names: [String]) {
-        remembered = names
-        UserDefaults.standard.set(names, forKey: "rememberedActive")
-    }
+    /// Off: every Forward off, the set remembered by the core. On: that set back on.
+    func setMaster(_ on: Bool) { core?.setAll(on: on) }
 
     func copyAddress(_ forward: ForwardView) {
         NSPasteboard.general.clearContents()
@@ -144,7 +132,6 @@ final class CoreModel {
         if active { core?.activate(name: forward.name) } else { core?.deactivate(name: forward.name) }
     }
 
-    func deactivateAll() { core?.deactivateAll() }
     func reload() { core?.reload() }
 
     func openConfig() {
@@ -202,13 +189,11 @@ final class CoreModel {
 
     // MARK: Core events
 
-    private func update(_ next: [ForwardView]) {
+    private func update(_ next: [ForwardView], canRestore: Bool) {
         let previous = Dictionary(forwards.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
         forwards = next
+        self.canRestore = canRestore
         hasLoaded = true
-        // A Forward newly turned on by hand starts a new set: forget the remembered one.
-        let newlyActive = next.contains { $0.active && previous[$0.name]?.active != true }
-        if newlyActive && !remembered.isEmpty { setRemembered([]) }
         for forward in next where forward.isInError && previous[forward.name]?.isInError != true {
             notifyError(forward)
         }
@@ -270,14 +255,14 @@ extension ForwardView {
 
 /// Receives core events, on the Rust thread.
 private final class Listener: CoreListener, @unchecked Sendable {
-    private let onChange: ([ForwardView]) -> Void
+    private let onChange: ([ForwardView], Bool) -> Void
     private let onNotice: (Notice) -> Void
 
-    init(onChange: @escaping ([ForwardView]) -> Void, onNotice: @escaping (Notice) -> Void) {
+    init(onChange: @escaping ([ForwardView], Bool) -> Void, onNotice: @escaping (Notice) -> Void) {
         self.onChange = onChange
         self.onNotice = onNotice
     }
 
-    func forwardsChanged(forwards: [ForwardView]) { onChange(forwards) }
+    func forwardsChanged(forwards: [ForwardView], canRestore: Bool) { onChange(forwards, canRestore) }
     func notice(notice: Notice) { onNotice(notice) }
 }

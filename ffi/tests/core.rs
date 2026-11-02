@@ -10,7 +10,7 @@ use kubeport_ffi::{Core, CoreListener, ForwardInput, ForwardView, TargetKind};
 struct Recorder(Arc<Mutex<Vec<ForwardView>>>);
 
 impl CoreListener for Recorder {
-    fn forwards_changed(&self, forwards: Vec<ForwardView>) {
+    fn forwards_changed(&self, forwards: Vec<ForwardView>, _can_restore: bool) {
         *self.0.lock().unwrap() = forwards;
     }
     fn notice(&self, _notice: kubeport_ffi::Notice) {}

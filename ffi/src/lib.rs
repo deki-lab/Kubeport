@@ -1,19 +1,20 @@
 //! UniFFI bridge between `kubeport-core` and the SwiftUI app.
 //!
 //! Swift only sees Forwards, their Desired state and their Actual state (ADR-0003).
-//! The core runs on its own thread with a `current_thread` tokio runtime;
-//! Swift sends it commands and receives changes through `CoreListener`.
+//! The core runs on its own thread with a `current_thread` tokio runtime, around a
+//! `Session` that owns every rule; this crate only translates calls, views and notices.
+//! Swift sends commands and receives changes through `CoreListener`.
 //! Form requests (namespaces, Targets, saving) reply through a `oneshot`,
 //! awaited on the Swift side as an `async` function.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use kubeport_core::catalog::{self, TargetChoice};
+use kubeport_core::config::minutes;
 use kubeport_core::{
-    Config, ConfigError, Field, Forward, IdleTimeout, KubeEnv, Manager, ManagerError, RealState,
-    Reason, Statuses, Target, login_shell_env, session,
+    Config, ConfigError, Field, Forward, IdleTimeout, KubeEnv, RealState, Reason, Session,
+    Statuses, Target, login_shell_env,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -122,6 +123,18 @@ pub enum Notice {
     },
 }
 
+impl From<kubeport_core::Notice> for Notice {
+    fn from(notice: kubeport_core::Notice) -> Self {
+        use kubeport_core::Notice as N;
+        match notice {
+            N::RivalDeactivated { rival, by } => Self::RivalDeactivated { rival, by },
+            N::IdleDeactivated { name, minutes } => Self::IdleDeactivated { name, minutes },
+            N::UnknownForward { name } => Self::UnknownForward { name },
+            N::ConfigNotReloaded { detail } => Self::ConfigNotReloaded { detail },
+        }
+    }
+}
+
 /// Idle timeout chosen for a Forward.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum IdleTimeoutView {
@@ -139,7 +152,7 @@ impl From<IdleTimeout> for IdleTimeoutView {
             IdleTimeout::Inherit => Self::Inherit,
             IdleTimeout::Never => Self::Never,
             IdleTimeout::After(d) => Self::Minutes {
-                minutes: minutes_of(d),
+                minutes: minutes(d),
             },
         }
     }
@@ -149,16 +162,10 @@ impl From<IdleTimeoutView> for IdleTimeout {
     fn from(idle: IdleTimeoutView) -> Self {
         match idle {
             IdleTimeoutView::Inherit => Self::Inherit,
-            IdleTimeoutView::Never | IdleTimeoutView::Minutes { minutes: 0 } => Self::Never,
-            IdleTimeoutView::Minutes { minutes } => {
-                Self::After(Duration::from_secs(u64::from(minutes) * 60))
-            }
+            IdleTimeoutView::Never => Self::Never,
+            IdleTimeoutView::Minutes { minutes } => Self::from_minutes(minutes),
         }
     }
-}
-
-fn minutes_of(d: Duration) -> u32 {
-    u32::try_from(d.as_secs().div_ceil(60)).unwrap_or(u32::MAX)
 }
 
 /// A Forward as the UI displays it.
@@ -230,8 +237,9 @@ pub enum CoreError {
 /// Implemented on the Swift side. Called from the core thread, never the main thread.
 #[uniffi::export(callback_interface)]
 pub trait CoreListener: Send + Sync {
-    /// Full list of Forwards, in config order, on every change.
-    fn forwards_changed(&self, forwards: Vec<ForwardView>);
+    /// Full list of Forwards, in config order, on every change. `can_restore`: the master
+    /// switch can turn a remembered set back on.
+    fn forwards_changed(&self, forwards: Vec<ForwardView>, can_restore: bool);
     /// Short message for the user (Competing Forward deactivated, invalid config…).
     fn notice(&self, notice: Notice);
 }
@@ -241,7 +249,7 @@ type Reply<T> = oneshot::Sender<Result<T, CoreError>>;
 enum Command {
     Activate(String),
     Deactivate(String),
-    DeactivateAll,
+    SetAll(bool),
     ReconnectAll,
     Reload,
     Contexts(Reply<Vec<String>>),
@@ -274,8 +282,7 @@ impl Core {
         let path = config_path
             .map(PathBuf::from)
             .unwrap_or_else(Config::default_path);
-        ensure_config_file(&path)?;
-        let config = Config::load(&path).map_err(config_error)?;
+        let config = Config::load_or_create(&path).map_err(config_error)?;
 
         let (commands, receiver) = mpsc::unbounded_channel();
         let thread_path = path.clone();
@@ -304,8 +311,9 @@ impl Core {
         let _ = self.commands.send(Command::Deactivate(name));
     }
 
-    pub fn deactivate_all(&self) {
-        let _ = self.commands.send(Command::DeactivateAll);
+    /// Master switch. Off: every Forward off, the set remembered. On: that set back on.
+    pub fn set_all(&self, on: bool) {
+        let _ = self.commands.send(Command::SetAll(on));
     }
 
     /// Call on Mac wake-up and on every network change.
@@ -380,32 +388,6 @@ impl Core {
     }
 }
 
-const TEMPLATE: &str = r#"# Kubeport Forwards. One [[forward]] block per port-forward.
-#
-# [[forward]]
-# name = "postgres-staging"   # unique name
-# context = "staging"          # kubeconfig context
-# namespace = "db"
-# service = "postgres"         # or: pod = "postgres-0"
-# remote_port = 5432           # Service (or pod) port
-# local_port = 5432            # optional, defaults to remote_port
-#
-# kubeconfig = "/path/to/kubeconfig"   # optional, at the top of the file
-"#;
-
-fn ensure_config_file(path: &Path) -> Result<(), CoreError> {
-    if path.exists() {
-        return Ok(());
-    }
-    let io = |e: std::io::Error| CoreError::ConfigFile {
-        detail: format!("{}: {e}", path.display()),
-    };
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(io)?;
-    }
-    std::fs::write(path, TEMPLATE).map_err(io)
-}
-
 fn config_error(e: ConfigError) -> CoreError {
     match e {
         ConfigError::DuplicateName(name) => CoreError::DuplicateName { name },
@@ -443,99 +425,58 @@ fn run(
     };
     // Read here, not in the constructor: the login shell can take up to 5 s.
     let env = KubeEnv::from(login_shell_env());
-    let session_path = session::path_next_to(&path);
 
     runtime.block_on(async move {
-        let mut manager = Manager::new(config, env);
-        let mut expired = manager.take_expired().expect("expiry receiver taken once");
-        let mut statuses = manager.subscribe();
-        for name in session::load_active(&session_path) {
-            if manager.config().get(&name).is_some() {
-                let _ = manager.activate(&name).await;
-            }
-        }
-        let mut last = views(&manager, &statuses.borrow_and_update());
-        let mut saved_active = active_names(&last);
-        listener.forwards_changed(last.clone());
+        let mut session = Session::new(config, path, env);
+        session.restore().await;
+        let mut statuses = session.statuses();
+        let mut last = (
+            views(&session, &statuses.borrow_and_update()),
+            session.can_restore(),
+        );
+        listener.forwards_changed(last.0.clone(), last.1);
 
         loop {
             tokio::select! {
                 command = commands.recv() => {
                     let Some(command) = command else { break };
-                    handle(&mut manager, &path, command, listener.as_ref()).await;
+                    for notice in handle(&mut session, command).await {
+                        listener.notice(notice.into());
+                    }
                 }
                 changed = statuses.changed() => {
                     if changed.is_err() {
                         break;
                     }
                 }
-                Some(name) = expired.recv() => {
-                    let minutes = manager
-                        .config()
-                        .get(&name)
-                        .and_then(|f| manager.config().idle_timeout(f))
-                        .map(minutes_of)
-                        .unwrap_or_default();
-                    manager.deactivate(&name);
-                    listener.notice(Notice::IdleDeactivated { name, minutes });
-                }
+                Some(notice) = session.next_expiry() => listener.notice(notice.into()),
             }
             // A command can change the config without changing the statuses (reload):
             // recompute after every event and send only if the view changed.
-            let now = views(&manager, &statuses.borrow_and_update());
+            let now = (
+                views(&session, &statuses.borrow_and_update()),
+                session.can_restore(),
+            );
             if now != last {
-                let active = active_names(&now);
-                if active != saved_active {
-                    if let Err(e) = session::save_active(&session_path, &active) {
-                        tracing::warn!("state.toml : {e}");
-                    }
-                    saved_active = active;
-                }
-                listener.forwards_changed(now.clone());
+                listener.forwards_changed(now.0.clone(), now.1);
                 last = now;
             }
         }
-        // App shutdown: keep state.toml as is for the next session.
-        manager.deactivate_all();
     });
 }
 
-fn active_names(views: &[ForwardView]) -> Vec<String> {
-    views
-        .iter()
-        .filter(|v| v.active)
-        .map(|v| v.name.clone())
-        .collect()
-}
-
-async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: &dyn CoreListener) {
+/// Runs one command on the Session; replies go through each command's `oneshot`.
+async fn handle(session: &mut Session, command: Command) -> Vec<kubeport_core::Notice> {
     match command {
-        Command::Activate(name) => match manager.activate(&name).await {
-            Ok(rivals) => {
-                for rival in rivals {
-                    listener.notice(Notice::RivalDeactivated {
-                        rival,
-                        by: name.clone(),
-                    });
-                }
-            }
-            Err(ManagerError::UnknownForward(name)) => {
-                listener.notice(Notice::UnknownForward { name })
-            }
-        },
-        Command::Deactivate(name) => manager.deactivate(&name),
-        Command::DeactivateAll => manager.deactivate_all(),
-        Command::ReconnectAll => manager.reconnect_all().await,
-        Command::Reload => match Config::load(path) {
-            Ok(config) => manager.replace_config(config).await,
-            Err(e) => listener.notice(Notice::ConfigNotReloaded {
-                detail: e.to_string(),
-            }),
-        },
+        Command::Activate(name) => return session.activate(&name).await,
+        Command::Deactivate(name) => session.deactivate(&name),
+        Command::SetAll(on) => return session.set_all(on).await,
+        Command::ReconnectAll => session.reconnect_all().await,
+        Command::Reload => return session.reload().await.into_iter().collect(),
         Command::Contexts(reply) => {
-            let _ = reply.send(manager.contexts().map_err(cluster_error));
+            let _ = reply.send(session.contexts().map_err(cluster_error));
         }
-        Command::Namespaces(context, reply) => match manager.client(&context).await {
+        Command::Namespaces(context, reply) => match session.client(&context).await {
             // The network call runs separately: the loop keeps serving the statuses.
             Ok(client) => {
                 tokio::spawn(async move {
@@ -546,7 +487,7 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
                 let _ = reply.send(Err(cluster_error(e)));
             }
         },
-        Command::Targets(context, namespace, reply) => match manager.client(&context).await {
+        Command::Targets(context, namespace, reply) => match session.client(&context).await {
             Ok(client) => {
                 tokio::spawn(async move {
                     let result = catalog::targets(client, &namespace).await;
@@ -562,23 +503,29 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
             }
         },
         Command::Save(previous, input, reply) => {
-            let _ = reply.send(save(manager, path, previous, input).await);
+            return match session
+                .save_forward(previous.as_deref(), forward(input))
+                .await
+            {
+                Ok(notices) => {
+                    let _ = reply.send(Ok(()));
+                    notices
+                }
+                Err(e) => {
+                    let _ = reply.send(Err(config_error(e)));
+                    Vec::new()
+                }
+            };
         }
         Command::Remove(name, reply) => {
-            let mut config = manager.config().clone();
-            config.remove(&name);
-            let _ = reply.send(apply(manager, path, config).await);
+            let _ = reply.send(session.remove_forward(&name).await.map_err(config_error));
         }
         Command::SetKubeconfig(kubeconfig, reply) => {
-            let mut config = manager.config().clone();
-            config.kubeconfig = kubeconfig
-                .filter(|p| !p.trim().is_empty())
-                .map(PathBuf::from);
-            // replace_config clears the client cache: the new kubeconfig is reread.
-            let _ = reply.send(apply(manager, path, config).await);
+            let path = kubeconfig.map(|p| PathBuf::from(p.trim()));
+            let _ = reply.send(session.set_kubeconfig(path).await.map_err(config_error));
         }
         Command::Kubeconfig(reply) => {
-            let current = manager
+            let current = session
                 .config()
                 .kubeconfig
                 .as_ref()
@@ -586,58 +533,35 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
             let _ = reply.send(Ok(current));
         }
         Command::DefaultIdle(reply) => {
-            let _ = reply.send(Ok(manager.config().idle_timeout_minutes));
+            let _ = reply.send(Ok(session.config().idle_timeout_minutes));
         }
         Command::SetDefaultIdle(minutes, reply) => {
-            let mut config = manager.config().clone();
-            config.idle_timeout_minutes = minutes.filter(|m| *m > 0);
-            let _ = reply.send(apply(manager, path, config).await);
+            let _ = reply.send(
+                session
+                    .set_default_idle_timeout(minutes)
+                    .await
+                    .map_err(config_error),
+            );
         }
     }
+    Vec::new()
 }
 
-async fn save(
-    manager: &mut Manager,
-    path: &Path,
-    previous: Option<String>,
-    input: ForwardInput,
-) -> Result<(), CoreError> {
-    let forward = Forward {
+/// A Forward entered in the form; surrounding spaces are not part of any field.
+fn forward(input: ForwardInput) -> Forward {
+    let target = input.target_name.trim().to_owned();
+    Forward {
         name: input.name.trim().to_owned(),
-        context: input.context,
+        context: input.context.trim().to_owned(),
         namespace: input.namespace.trim().to_owned(),
         target: match input.target_kind {
-            TargetKind::Service => Target::Service(input.target_name),
-            TargetKind::Pod => Target::Pod(input.target_name),
+            TargetKind::Service => Target::Service(target),
+            TargetKind::Pod => Target::Pod(target),
         },
         remote_port: input.remote_port,
         local_port: input.local_port,
         idle_timeout: input.idle_timeout.into(),
-    };
-    let was_active = previous.as_deref().is_some_and(|p| {
-        manager
-            .subscribe()
-            .borrow()
-            .get(p)
-            .is_some_and(|s| s.active)
-    });
-    let name = forward.name.clone();
-    let mut config = manager.config().clone();
-    config
-        .upsert(previous.as_deref(), forward)
-        .map_err(config_error)?;
-    apply(manager, path, config).await?;
-    if was_active {
-        let _ = manager.activate(&name).await;
     }
-    Ok(())
-}
-
-/// Saves the config, then applies it to the Manager.
-async fn apply(manager: &mut Manager, path: &Path, config: Config) -> Result<(), CoreError> {
-    config.save(path).map_err(config_error)?;
-    manager.replace_config(config).await;
-    Ok(())
 }
 
 fn cluster_error(reason: Reason) -> CoreError {
@@ -669,8 +593,8 @@ fn target_option(choice: TargetChoice) -> TargetOption {
     }
 }
 
-fn views(manager: &Manager, statuses: &Statuses) -> Vec<ForwardView> {
-    manager
+fn views(session: &Session, statuses: &Statuses) -> Vec<ForwardView> {
+    session
         .config()
         .forwards
         .iter()
