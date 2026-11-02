@@ -554,6 +554,8 @@ Voir la section 3 (maquettes 3.1 à 3.8).
 
 Tests unitaires Swift (cible `KubeportTests`, à créer) sauf mention.
 
+- [ ] **Thème de macOS** : le panneau, le formulaire, les réglages et l'icône suivent le mode clair ou sombre et la couleur d'accentuation du Mac, sans relancer l'app. Aucune couleur codée en dur : uniquement des couleurs système (`.primary`, `.secondary`, `Color(nsColor: .systemRed)`, matériaux de fenêtre, `.tint` par défaut). Vérifié à l'écran en clair, en sombre et avec une couleur d'accentuation autre que bleue. Maquettes de référence : canevas « Kubeport — maquettes du panneau », réglage Thème (Auto, Clair, Sombre).
+
 - [ ] Le modèle ne produit pas l'état vide avant le premier `forwardsChanged` : test sur `CoreModel.hasLoaded` (faux au départ, vrai après le premier événement) ; l'écran liste affiche « Chargement des Forwards… » tant qu'il est faux.
 - [ ] Avec `startError`, « Ouvrir la config » ouvre `config.toml` (chemin calculé sans `core`) et « Réessayer » recrée le cœur ; test sur `CoreModel.retryStart()` avec une config valide.
 - [ ] Les groupes, les compteurs du résumé et les résumés de groupes replié sont calculés dans `CoreModel` à chaque `forwardsChanged` ; test sur 20 Forwards en 3 groupes : compteurs attendus (4 Connectés, 1 en Reconnexion, 1 en Erreur, groupe replié `▲ 1 en Erreur`).
