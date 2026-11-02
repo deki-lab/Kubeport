@@ -17,7 +17,7 @@ jobs:
       version: ${{ steps.rp.outputs.version }}
     steps:
       - id: rp
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
@@ -29,39 +29,53 @@ jobs:
     outputs:
       sha256: ${{ steps.dmg.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
-      - uses: dtolnay/rust-toolchain@stable
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       - id: dmg
-        run: |
-          DMG="$(./scripts/build-app.sh | tail -1)"
-          echo "sha256=$(shasum -a 256 "$DMG" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          gh release upload "${{ needs.release-please.outputs.tag_name }}" "$DMG" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag invalide : $TAG" >&2; exit 1; }
+          DMG="$(./scripts/build-app.sh | tail -1)"
+          echo "sha256=$(shasum -a 256 "$DMG" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          gh release upload "$TAG" "$DMG" --clobber --repo "$GITHUB_REPOSITORY"
 
   homebrew-tap:
     needs: [release-please, build-dmg]
     # Activé quand le dépôt est public : variable de dépôt HOMEBREW_TAP_ENABLED=true
     # et secret HOMEBREW_TAP_TOKEN (PAT fine-grained, contents:write sur deki-lab/homebrew-tap).
-    if: vars.HOMEBREW_TAP_ENABLED == 'true'
+    if: >-
+      needs.release-please.outputs.release_created == 'true' &&
+      needs.build-dmg.result == 'success' &&
+      vars.HOMEBREW_TAP_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: deki-lab/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
-      - run: |
+      - env:
+          VERSION: ${{ needs.release-please.outputs.version }}
+          SHA256: ${{ needs.build-dmg.outputs.sha256 }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version invalide : $VERSION" >&2; exit 1; }
+          [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "sha256 invalide : $SHA256" >&2; exit 1; }
           mkdir -p tap/Casks
-          sed -e "s/__VERSION__/${{ needs.release-please.outputs.version }}/" \
-              -e "s/__SHA256__/${{ needs.build-dmg.outputs.sha256 }}/" \
+          sed -e "s/__VERSION__/$VERSION/" -e "s/__SHA256__/$SHA256/" \
               packaging/kubeport.rb.tmpl > tap/Casks/kubeport.rb
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/kubeport.rb
-          git commit -m "kubeport ${{ needs.release-please.outputs.version }}"
+          git commit -m "kubeport $VERSION"
           git push
