@@ -1,0 +1,4 @@
+[env]
+# Même cible minimale que l'app (LSMinimumSystemVersion) : sans ça, le code C de
+# ring est compilé pour la version de macOS de la machine de build.
+MACOSX_DEPLOYMENT_TARGET = "14.0"
