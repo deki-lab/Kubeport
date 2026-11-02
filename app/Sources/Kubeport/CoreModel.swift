@@ -18,6 +18,14 @@ final class CoreModel {
     private(set) var forwards: [ForwardView] = []
     private(set) var notice: String?
     private(set) var startError: String?
+    /// False until the core sends its first list: avoids a false empty state at launch.
+    private(set) var hasLoaded = false
+    /// Forwards to re-activate when the master switch is turned back on.
+    private(set) var remembered: [String] = UserDefaults.standard.stringArray(forKey: "rememberedActive") ?? []
+    /// "Inactive Forwards" section expanded; remembered between openings.
+    var inactiveExpanded: Bool = UserDefaults.standard.bool(forKey: "inactiveExpanded") {
+        didSet { UserDefaults.standard.set(inactiveExpanded, forKey: "inactiveExpanded") }
+    }
 
     @ObservationIgnored private var core: Core?
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
@@ -27,22 +35,94 @@ final class CoreModel {
     @ObservationIgnored private var notificationsRequested = false
 
     init() {
+        start()
+        // KUBEPORT_ACTIVATE=a,b: Forwards to activate at launch (measurements, tests).
+        for name in (ProcessInfo.processInfo.environment["KUBEPORT_ACTIVATE"] ?? "").split(separator: ",") {
+            core?.activate(name: String(name))
+        }
+        watchWakeAndNetwork()
+    }
+
+    /// Starts the core; on failure (unreadable config) keeps the error for the panel.
+    private func start() {
         let listener = Listener(
             onChange: { [weak self] forwards in Task { @MainActor in self?.update(forwards) } },
             onNotice: { [weak self] notice in Task { @MainActor in self?.show(notice.text) } }
         )
-        let env = ProcessInfo.processInfo.environment
         do {
-            // KUBEPORT_CONFIG: alternate config (development, tests).
-            core = try Core(configPath: env["KUBEPORT_CONFIG"], listener: listener)
+            core = try Core(configPath: Self.configOverride, listener: listener)
+            startError = nil
         } catch {
+            core = nil
             startError = describe(error)
         }
-        // KUBEPORT_ACTIVATE=a,b: Forwards to activate at launch (measurements, tests).
-        for name in (env["KUBEPORT_ACTIVATE"] ?? "").split(separator: ",") {
-            core?.activate(name: String(name))
+    }
+
+    /// "Try Again" after a start error, once the config file is fixed.
+    func restart() {
+        hasLoaded = false
+        start()
+    }
+
+    /// KUBEPORT_CONFIG: alternate config (development, tests).
+    private static var configOverride: String? { ProcessInfo.processInfo.environment["KUBEPORT_CONFIG"] }
+
+    var isReady: Bool { core != nil && hasLoaded }
+
+    // MARK: List
+
+    struct Group {
+        let title: String
+        let forwards: [ForwardView]
+    }
+
+    var activeGroups: [Group] { Self.grouped(forwards.filter(\.active)) }
+    var inactiveGroups: [Group] { Self.grouped(forwards.filter { !$0.active }) }
+    var inactiveCount: Int { forwards.filter { !$0.active }.count }
+
+    /// Groups by "Context · namespace", sorted; config order inside a group.
+    private static func grouped(_ forwards: [ForwardView]) -> [Group] {
+        var byTitle: [String: [ForwardView]] = [:]
+        for forward in forwards {
+            byTitle["\(forward.context) · \(forward.namespace)", default: []].append(forward)
         }
-        watchWakeAndNetwork()
+        return byTitle.keys.sorted().map { Group(title: $0, forwards: byTitle[$0]!) }
+    }
+
+    // MARK: Master switch
+
+    var masterOn: Bool { forwards.contains(where: \.active) }
+    var masterEnabled: Bool { masterOn || !remembered.isEmpty }
+
+    /// Off: deactivate everything and remember what was Active. On: bring that set back.
+    func setMaster(_ on: Bool) {
+        if on {
+            let known = Set(forwards.map(\.name))
+            for name in remembered where known.contains(name) { core?.activate(name: name) }
+            setRemembered([])
+        } else {
+            setRemembered(forwards.filter(\.active).map(\.name))
+            core?.deactivateAll()
+        }
+    }
+
+    private func setRemembered(_ names: [String]) {
+        remembered = names
+        UserDefaults.standard.set(names, forKey: "rememberedActive")
+    }
+
+    func copyAddress(_ forward: ForwardView) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("localhost:\(forward.localPort)", forType: .string)
+    }
+
+    func dismissNotice() {
+        noticeTask?.cancel()
+        notice = nil
+    }
+
+    var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
     }
 
     var globalState: GlobalState {
@@ -52,7 +132,11 @@ final class CoreModel {
         return .active
     }
 
-    var configPath: String? { core?.configPath() }
+    /// Config file path, known even when the core could not start.
+    var configPath: String {
+        core?.configPath() ?? Self.configOverride ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/k8s_forwarder/config.toml").path
+    }
 
     // MARK: Commands
 
@@ -64,9 +148,10 @@ final class CoreModel {
     func reload() { core?.reload() }
 
     func openConfig() {
-        guard let path = configPath else { return }
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        NSWorkspace.shared.open(URL(fileURLWithPath: configPath))
     }
+
+    func quit() { NSApplication.shared.terminate(nil) }
 
     // MARK: Form and settings
 
@@ -120,6 +205,10 @@ final class CoreModel {
     private func update(_ next: [ForwardView]) {
         let previous = Dictionary(forwards.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
         forwards = next
+        hasLoaded = true
+        // A Forward newly turned on by hand starts a new set: forget the remembered one.
+        let newlyActive = next.contains { $0.active && previous[$0.name]?.active != true }
+        if newlyActive && !remembered.isEmpty { setRemembered([]) }
         for forward in next where forward.isInError && previous[forward.name]?.isInError != true {
             notifyError(forward)
         }

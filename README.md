@@ -23,13 +23,17 @@ Requirements: macOS 14 or later, Apple Silicon Mac.
 
 The UI follows the macOS language: English or French (English for any other language).
 
-- **New Forward**: Context, namespace, Service or Pod, and ports are suggested from the cluster.
-- Right-click a Forward: **Edit** (an Active Forward is restarted) or **Duplicate**.
-- **Settings** (gear icon): open at login, forced kubeconfig.
+The panel looks like the macOS Wi-Fi menu:
+
+- The **Kubeport** switch at the top turns every Forward off, and turns the same ones back on.
+- Active Forwards are listed first, grouped by Context · namespace; **Inactive Forwards ›** expands the others. The list scrolls past 440 pt.
+- Each row has its own **switch**. Click the row for its details (Target, Resolved pod, address with Copy) and **Edit…** / **Duplicate…** (an Active Forward is restarted when edited).
+- **New Forward…**: Context, namespace, Service or Pod, and ports are suggested from the cluster.
+- **Kubeport Settings…**: open at login, default Idle timeout, forced kubeconfig, open or reload the config file, quit.
 - Forwards that are Active when the app quits are reactivated on next launch.
 - **Auto-deactivate**: an Active Forward with no open connection for the Idle timeout (in Settings, or per Forward: never, 15 min, 1 h, 4 h) turns Inactive on its own. In `config.toml`: `idle_timeout = 60` (minutes) at the top of the file or inside a `[[forward]]`, `"never"` to disable.
 - Files, in `~/Library/Application Support/k8s_forwarder/`:
-  - `config.toml`: the Forwards, hand-editable (then click **Reload**). The app rewrites the file when you edit from the UI: hand-written comments are lost.
+  - `config.toml`: the Forwards, hand-editable (then **Reload Config** in Settings). The app rewrites the file when you edit from the UI: hand-written comments are lost.
   - `state.toml`: Active Forwards, managed by the app.
 
 ## Development
