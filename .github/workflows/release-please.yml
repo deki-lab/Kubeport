@@ -25,8 +25,8 @@ jobs:
   build-dmg:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
-    # Runners auto-hébergés (Mac du mainteneur) tant que le dépôt est privé : GitHub annule
-    # les jobs macos-15 arm64 faute de capacité. Revenir à `macos-15` avant le passage en public.
+    # Self-hosted runners (maintainer's Mac) while the repo is private: GitHub cancels
+    # macos-15 arm64 jobs for lack of capacity. Switch back to `macos-15` before going public.
     runs-on: [self-hosted, macOS, ARM64, kubeport]
     outputs:
       sha256: ${{ steps.dmg.outputs.sha256 }}
@@ -36,7 +36,7 @@ jobs:
           ref: ${{ needs.release-please.outputs.tag_name }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-        # Sur le Mac du mainteneur, on garde son rustup tel quel.
+        # On the maintainer's Mac, keep their rustup as is.
         if: runner.environment == 'github-hosted'
         with:
           toolchain: stable
@@ -45,15 +45,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag invalide : $TAG" >&2; exit 1; }
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid tag: $TAG" >&2; exit 1; }
           DMG="$(./scripts/build-app.sh | tail -1)"
           echo "sha256=$(shasum -a 256 "$DMG" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           gh release upload "$TAG" "$DMG" --clobber --repo "$GITHUB_REPOSITORY"
 
   homebrew-tap:
     needs: [release-please, build-dmg]
-    # Activé quand le dépôt est public : variable de dépôt HOMEBREW_TAP_ENABLED=true
-    # et secret HOMEBREW_TAP_TOKEN (PAT fine-grained, contents:write sur deki-lab/homebrew-tap).
+    # Enabled once the repo is public: repo variable HOMEBREW_TAP_ENABLED=true
+    # and secret HOMEBREW_TAP_TOKEN (fine-grained PAT, contents:write on deki-lab/homebrew-tap).
     if: >-
       needs.release-please.outputs.release_created == 'true' &&
       needs.build-dmg.result == 'success' &&
@@ -72,8 +72,8 @@ jobs:
           VERSION: ${{ needs.release-please.outputs.version }}
           SHA256: ${{ needs.build-dmg.outputs.sha256 }}
         run: |
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version invalide : $VERSION" >&2; exit 1; }
-          [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "sha256 invalide : $SHA256" >&2; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid version: $VERSION" >&2; exit 1; }
+          [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "invalid sha256: $SHA256" >&2; exit 1; }
           mkdir -p tap/Casks
           sed -e "s/__VERSION__/$VERSION/" -e "s/__SHA256__/$SHA256/" \
               packaging/kubeport.rb.tmpl > tap/Casks/kubeport.rb

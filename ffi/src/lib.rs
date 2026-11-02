@@ -1,10 +1,10 @@
-//! Pont UniFFI entre `kubeport-core` et l'app SwiftUI.
+//! UniFFI bridge between `kubeport-core` and the SwiftUI app.
 //!
-//! Swift ne voit que des Forwards, leur État voulu et leur État réel (ADR-0003).
-//! Le cœur tourne sur son propre thread avec un runtime tokio `current_thread` ;
-//! Swift lui envoie des commandes et reçoit les changements par `CoreListener`.
-//! Les requêtes du formulaire (namespaces, Cibles, enregistrement) répondent par un
-//! `oneshot`, attendu côté Swift comme une fonction `async`.
+//! Swift only sees Forwards, their Desired state and their Actual state (ADR-0003).
+//! The core runs on its own thread with a `current_thread` tokio runtime;
+//! Swift sends it commands and receives changes through `CoreListener`.
+//! Form requests (namespaces, Targets, saving) reply through a `oneshot`,
+//! awaited on the Swift side as an `async` function.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -25,7 +25,7 @@ pub enum TargetKind {
     Pod,
 }
 
-/// État réel d'un Forward Actif.
+/// Actual state of an Active Forward.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum RealStateView {
     Connected { pod: String },
@@ -33,7 +33,7 @@ pub enum RealStateView {
     Error { reason: ReasonView },
 }
 
-/// Cause d'une Reconnexion ou d'une Erreur, traduite côté Swift.
+/// Cause of a Reconnecting or Error state, translated on the Swift side.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum ReasonView {
     ConnectingToCluster,
@@ -89,7 +89,7 @@ impl std::fmt::Display for ReasonView {
     }
 }
 
-/// Champ obligatoire manquant dans le formulaire.
+/// Required field missing from the form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum FormField {
     Name,
@@ -98,10 +98,10 @@ pub enum FormField {
     Target,
 }
 
-/// Message bref pour l'utilisateur, traduit côté Swift.
+/// Short message for the user, translated on the Swift side.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Notice {
-    /// `rival` a été désactivé : `by` utilise le même port local.
+    /// `rival` was deactivated: `by` uses the same local port.
     RivalDeactivated {
         rival: String,
         by: String,
@@ -115,17 +115,17 @@ pub enum Notice {
     CoreStartFailed {
         detail: String,
     },
-    /// Délai d'inactivité écoulé : `name` est passé Inactif.
+    /// Idle timeout elapsed: `name` went Inactive.
     IdleDeactivated {
         name: String,
         minutes: u32,
     },
 }
 
-/// Délai d'inactivité choisi pour un Forward.
+/// Idle timeout chosen for a Forward.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum IdleTimeoutView {
-    /// Suit le réglage par défaut.
+    /// Follows the default setting.
     Inherit,
     Never,
     Minutes {
@@ -161,7 +161,7 @@ fn minutes_of(d: Duration) -> u32 {
     u32::try_from(d.as_secs().div_ceil(60)).unwrap_or(u32::MAX)
 }
 
-/// Un Forward tel que l'interface l'affiche.
+/// A Forward as the UI displays it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ForwardView {
     pub name: String,
@@ -171,18 +171,18 @@ pub struct ForwardView {
     pub target_name: String,
     pub remote_port: u16,
     pub local_port: u16,
-    /// État voulu.
+    /// Desired state.
     pub active: bool,
-    /// État réel, présent seulement si le Forward est Actif.
+    /// Actual state, present only if the Forward is Active.
     pub state: Option<RealStateView>,
-    /// Délai d'inactivité choisi pour ce Forward.
+    /// Idle timeout chosen for this Forward.
     pub idle_timeout: IdleTimeoutView,
-    /// Échéance de désactivation automatique, en secondes Unix ; absente si une
-    /// connexion est ouverte ou sans délai.
+    /// Automatic deactivation deadline, in Unix seconds; absent if a connection
+    /// is open or there is no timeout.
     pub idle_deadline_unix: Option<i64>,
 }
 
-/// Un Forward saisi dans le formulaire.
+/// A Forward entered in the form.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ForwardInput {
     pub name: String,
@@ -201,7 +201,7 @@ pub struct PortOption {
     pub name: Option<String>,
 }
 
-/// Cible proposée par le cluster au formulaire.
+/// Target offered by the cluster to the form.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct TargetOption {
     pub kind: TargetKind,
@@ -227,12 +227,12 @@ pub enum CoreError {
     Stopped,
 }
 
-/// Implémenté côté Swift. Appelé depuis le thread du cœur, jamais le thread principal.
+/// Implemented on the Swift side. Called from the core thread, never the main thread.
 #[uniffi::export(callback_interface)]
 pub trait CoreListener: Send + Sync {
-    /// Liste complète des Forwards, dans l'ordre de la config, à chaque changement.
+    /// Full list of Forwards, in config order, on every change.
     fn forwards_changed(&self, forwards: Vec<ForwardView>);
-    /// Message bref pour l'utilisateur (Forward concurrent désactivé, config invalide…).
+    /// Short message for the user (Competing Forward deactivated, invalid config…).
     fn notice(&self, notice: Notice);
 }
 
@@ -263,9 +263,9 @@ pub struct Core {
 
 #[uniffi::export]
 impl Core {
-    /// Démarre le cœur. `config_path` absent : emplacement par défaut.
-    /// Un fichier absent est créé avec un exemple commenté. Les Forwards Actifs à la
-    /// dernière fermeture sont réactivés.
+    /// Starts the core. `config_path` absent: default location.
+    /// A missing file is created with a commented example. Forwards Active at the
+    /// last shutdown are reactivated.
     #[uniffi::constructor]
     pub fn new(
         config_path: Option<String>,
@@ -308,12 +308,12 @@ impl Core {
         let _ = self.commands.send(Command::DeactivateAll);
     }
 
-    /// À appeler au réveil du Mac et à chaque changement de réseau.
+    /// Call on Mac wake-up and on every network change.
     pub fn reconnect_all(&self) {
         let _ = self.commands.send(Command::ReconnectAll);
     }
 
-    /// Relit le fichier de config après une édition à la main.
+    /// Rereads the config file after a manual edit.
     pub fn reload(&self) {
         let _ = self.commands.send(Command::Reload);
     }
@@ -335,7 +335,7 @@ impl Core {
             .await
     }
 
-    /// Ajoute un Forward, ou remplace `previous_name`. Un Forward Actif modifié est relancé.
+    /// Adds a Forward, or replaces `previous_name`. A modified Active Forward is restarted.
     pub async fn save_forward(
         &self,
         previous_name: Option<String>,
@@ -349,7 +349,7 @@ impl Core {
         self.ask(|reply| Command::Remove(name, reply)).await
     }
 
-    /// Réglage du kubeconfig forcé ; `None` revient au comportement par défaut.
+    /// Forced kubeconfig setting; `None` restores the default behaviour.
     pub async fn set_kubeconfig(&self, path: Option<String>) -> Result<(), CoreError> {
         self.ask(|reply| Command::SetKubeconfig(path, reply)).await
     }
@@ -358,12 +358,12 @@ impl Core {
         self.ask(Command::Kubeconfig).await
     }
 
-    /// Délai d'inactivité par défaut, en minutes ; `None` : jamais.
+    /// Default Idle timeout, in minutes; `None`: never.
     pub async fn default_idle_timeout(&self) -> Result<Option<u32>, CoreError> {
         self.ask(Command::DefaultIdle).await
     }
 
-    /// Change le Délai d'inactivité par défaut ; les Forwards Actifs concernés sont relancés.
+    /// Changes the default Idle timeout; the affected Active Forwards are restarted.
     pub async fn set_default_idle_timeout(&self, minutes: Option<u32>) -> Result<(), CoreError> {
         self.ask(|reply| Command::SetDefaultIdle(minutes, reply))
             .await
@@ -441,15 +441,13 @@ fn run(
             });
         }
     };
-    // Lu ici et non dans le constructeur : le shell de login peut prendre jusqu'à 5 s.
+    // Read here, not in the constructor: the login shell can take up to 5 s.
     let env = KubeEnv::from(login_shell_env());
     let session_path = session::path_next_to(&path);
 
     runtime.block_on(async move {
         let mut manager = Manager::new(config, env);
-        let mut expired = manager
-            .take_expired()
-            .expect("receveur d'expiration pris une seule fois");
+        let mut expired = manager.take_expired().expect("expiry receiver taken once");
         let mut statuses = manager.subscribe();
         for name in session::load_active(&session_path) {
             if manager.config().get(&name).is_some() {
@@ -482,8 +480,8 @@ fn run(
                     listener.notice(Notice::IdleDeactivated { name, minutes });
                 }
             }
-            // Une commande peut changer la config sans changer les statuts (rechargement) :
-            // on recalcule après chaque événement et on n'envoie que si la vue a changé.
+            // A command can change the config without changing the statuses (reload):
+            // recompute after every event and send only if the view changed.
             let now = views(&manager, &statuses.borrow_and_update());
             if now != last {
                 let active = active_names(&now);
@@ -497,7 +495,7 @@ fn run(
                 last = now;
             }
         }
-        // Fermeture de l'app : on garde state.toml tel quel pour la prochaine session.
+        // App shutdown: keep state.toml as is for the next session.
         manager.deactivate_all();
     });
 }
@@ -538,7 +536,7 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
             let _ = reply.send(manager.contexts().map_err(cluster_error));
         }
         Command::Namespaces(context, reply) => match manager.client(&context).await {
-            // L'appel réseau tourne à part : la boucle continue de servir les statuts.
+            // The network call runs separately: the loop keeps serving the statuses.
             Ok(client) => {
                 tokio::spawn(async move {
                     let _ = reply.send(catalog::namespaces(client).await.map_err(list_error));
@@ -576,7 +574,7 @@ async fn handle(manager: &mut Manager, path: &Path, command: Command, listener: 
             config.kubeconfig = kubeconfig
                 .filter(|p| !p.trim().is_empty())
                 .map(PathBuf::from);
-            // replace_config vide le cache de clients : le nouveau kubeconfig est relu.
+            // replace_config clears the client cache: the new kubeconfig is reread.
             let _ = reply.send(apply(manager, path, config).await);
         }
         Command::Kubeconfig(reply) => {
@@ -635,7 +633,7 @@ async fn save(
     Ok(())
 }
 
-/// Enregistre la config puis l'applique au Manager.
+/// Saves the config, then applies it to the Manager.
 async fn apply(manager: &mut Manager, path: &Path, config: Config) -> Result<(), CoreError> {
     config.save(path).map_err(config_error)?;
     manager.replace_config(config).await;

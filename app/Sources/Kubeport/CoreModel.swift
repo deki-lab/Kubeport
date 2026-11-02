@@ -4,14 +4,14 @@ import Observation
 import ServiceManagement
 import UserNotifications
 
-/// État global affiché par l'icône de la barre de menu.
+/// Overall state shown by the menu bar icon.
 enum GlobalState {
-    case idle    // aucun Forward Actif
-    case active  // au moins un Forward Actif, aucun en Erreur
-    case error   // au moins un Forward Actif en Erreur
+    case idle    // no Active Forward
+    case active  // at least one Active Forward, none in Error
+    case error   // at least one Active Forward in Error
 }
 
-/// Façade du cœur Rust pour SwiftUI. Toutes les mutations passent par le thread principal.
+/// Facade of the Rust core for SwiftUI. Every mutation goes through the main thread.
 @Observable
 @MainActor
 final class CoreModel {
@@ -33,12 +33,12 @@ final class CoreModel {
         )
         let env = ProcessInfo.processInfo.environment
         do {
-            // KUBEPORT_CONFIG : config alternative (développement, tests).
+            // KUBEPORT_CONFIG: alternate config (development, tests).
             core = try Core(configPath: env["KUBEPORT_CONFIG"], listener: listener)
         } catch {
             startError = describe(error)
         }
-        // KUBEPORT_ACTIVATE=a,b : Forwards à activer au lancement (mesures, tests).
+        // KUBEPORT_ACTIVATE=a,b: Forwards to activate at launch (measurements, tests).
         for name in (env["KUBEPORT_ACTIVATE"] ?? "").split(separator: ",") {
             core?.activate(name: String(name))
         }
@@ -54,7 +54,7 @@ final class CoreModel {
 
     var configPath: String? { core?.configPath() }
 
-    // MARK: Commandes
+    // MARK: Commands
 
     func setActive(_ forward: ForwardView, _ active: Bool) {
         if active { core?.activate(name: forward.name) } else { core?.deactivate(name: forward.name) }
@@ -68,7 +68,7 @@ final class CoreModel {
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
-    // MARK: Formulaire et réglages
+    // MARK: Form and settings
 
     func contexts() async throws -> [String] { try await requireCore().contexts() }
 
@@ -115,7 +115,7 @@ final class CoreModel {
         return core
     }
 
-    // MARK: Événements du cœur
+    // MARK: Core events
 
     private func update(_ next: [ForwardView]) {
         let previous = Dictionary(forwards.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
@@ -125,7 +125,7 @@ final class CoreModel {
         }
     }
 
-    /// Notification seulement au passage en Erreur ; les Reconnexions restent silencieuses.
+    /// Notify only on entering Error; Reconnecting stays silent.
     private func notifyError(_ forward: ForwardView) {
         guard case .error(let reason)? = forward.state else { return }
         let center = UNUserNotificationCenter.current()
@@ -148,7 +148,7 @@ final class CoreModel {
         }
     }
 
-    /// Au réveil et à chaque changement de réseau, les tunnels sont morts : on relance tout.
+    /// On wake-up and on every network change, the tunnels are dead: restart everything.
     private func watchWakeAndNetwork() {
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -166,7 +166,7 @@ final class CoreModel {
 
     private func networkChanged(_ signature: String) {
         defer { lastPath = signature }
-        // Premier signal : état initial, pas un changement.
+        // First signal: initial state, not a change.
         guard let previous = lastPath, previous != signature, signature != "offline" else { return }
         core?.reconnectAll()
     }
@@ -179,7 +179,7 @@ extension ForwardView {
     }
 }
 
-/// Reçoit les événements du cœur, sur le thread Rust.
+/// Receives core events, on the Rust thread.
 private final class Listener: CoreListener, @unchecked Sendable {
     private let onChange: ([ForwardView]) -> Void
     private let onNotice: (Notice) -> Void

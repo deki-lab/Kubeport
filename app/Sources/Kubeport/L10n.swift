@@ -1,8 +1,8 @@
 import Foundation
 
-/// Texte traduit dans la langue de la machine (`app/Resources/<langue>.lproj/Localizable.strings`).
-/// Les clés sont vérifiées par `scripts/check-l10n.py` : une clé absente fait échouer le build.
-/// Les arguments remplacent `%1$@`, `%2$@`… : on passe toujours des `String`.
+/// Text translated into the machine's language (`app/Resources/<language>.lproj/Localizable.strings`).
+/// Keys are checked by `scripts/check-l10n.py`: a missing key fails the build.
+/// Arguments replace `%1$@`, `%2$@`…: always pass `String`s.
 func L(_ key: String, _ args: String...) -> String {
     let format = Bundle.main.localizedString(forKey: key, value: nil, table: nil)
     return args.isEmpty ? format : String(format: format, arguments: args)
@@ -56,21 +56,21 @@ extension FormField {
     }
 }
 
-/// « 15 min », « 1 h », « 4 h ».
+/// "15 min", "1 h", "4 h".
 func idleDuration(_ minutes: UInt32) -> String {
     minutes % 60 == 0 ? L("idle.hours", String(minutes / 60)) : L("idle.minutes", String(minutes))
 }
 
-/// Choix proposés pour le Délai d'inactivité, en minutes.
+/// Choices offered for the Idle timeout, in minutes.
 let idleChoices: [UInt32] = [15, 60, 240]
 
-/// Libellé d'un réglage par défaut : « Jamais » ou une durée.
+/// Label of a default setting: "Never" or a duration.
 func idleDefaultLabel(_ minutes: UInt32?) -> String {
     minutes.map(idleDuration) ?? L("idle.never")
 }
 
 extension ForwardView {
-    /// « Inactif dans 12 min » quand une échéance court, sinon `nil`.
+    /// "Inactive in 12 min" while a deadline is running, otherwise `nil`.
     var idleCountdown: String? {
         guard active, let deadline = idleDeadlineUnix else { return nil }
         let seconds = Double(deadline) - Date().timeIntervalSince1970
@@ -79,7 +79,7 @@ extension ForwardView {
     }
 }
 
-/// Message lisible pour une erreur du cœur.
+/// Readable message for a core error.
 func describe(_ error: Error) -> String {
     guard let error = error as? CoreError else { return error.localizedDescription }
     switch error {

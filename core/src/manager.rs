@@ -1,4 +1,4 @@
-//! Pilote les Forwards : État voulu, Forwards concurrents, un client par Contexte.
+//! Drives the Forwards: Desired state, Competing Forwards, one client per Context.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -23,12 +23,12 @@ pub enum ManagerError {
     UnknownForward(String),
 }
 
-/// D'où lire le kubeconfig et avec quel `PATH` lancer les plugins d'auth `exec`.
+/// Where to read the kubeconfig from and which `PATH` to run `exec` auth plugins with.
 #[derive(Debug, Default, Clone)]
 pub struct KubeEnv {
-    /// Fichiers kubeconfig à fusionner ; vide : `KUBECONFIG` du process, puis `~/.kube/config`.
+    /// Kubeconfig files to merge; empty: the process `KUBECONFIG`, then `~/.kube/config`.
     pub kubeconfig: Vec<PathBuf>,
-    /// `PATH` injecté dans les plugins `exec` qui n'en déclarent pas.
+    /// `PATH` injected into `exec` plugins that do not declare one.
     pub exec_path: Option<String>,
 }
 
@@ -66,9 +66,9 @@ impl Manager {
         }
     }
 
-    /// Noms des Forwards dont le Délai d'inactivité vient d'expirer. Celui qui pilote le
-    /// Manager les reçoit et appelle `deactivate` : le Manager ne se désactive pas seul,
-    /// pour que l'interface puisse prévenir l'utilisateur. Disponible une seule fois.
+    /// Names of the Forwards whose Idle timeout just expired. Whoever drives the
+    /// Manager receives them and calls `deactivate`: the Manager does not deactivate on its
+    /// own, so the UI can notify the user. Available only once.
     pub fn take_expired(&mut self) -> Option<mpsc::UnboundedReceiver<String>> {
         self.expired_rx.take()
     }
@@ -81,7 +81,7 @@ impl Manager {
         self.status.subscribe()
     }
 
-    /// Passe un Forward à Actif. Renvoie les Forwards concurrents désactivés au passage.
+    /// Makes a Forward Active. Returns the Competing Forwards deactivated along the way.
     pub async fn activate(&mut self, name: &str) -> Result<Vec<String>, ManagerError> {
         let forward = self
             .config
@@ -100,7 +100,7 @@ impl Manager {
             .filter(|n| self.running.contains_key(n))
             .collect();
         for rival in &rivals {
-            // Attendre la fin du concurrent : il doit libérer le port local avant qu'on l'ouvre.
+            // Wait for the competitor to finish: it must release the local port before we open it.
             if let Some(task) = self.stop(rival) {
                 let _ = task.await;
             }
@@ -122,7 +122,7 @@ impl Manager {
         Ok(rivals)
     }
 
-    /// Passe un Forward à Inactif : ses connexions sont coupées.
+    /// Makes a Forward Inactive: its connections are cut.
     pub fn deactivate(&mut self, name: &str) {
         self.stop(name);
     }
@@ -134,7 +134,7 @@ impl Manager {
         }
     }
 
-    /// Relance tous les Forwards Actifs avec des clients neufs (réveil, changement de réseau).
+    /// Restarts every Active Forward with fresh clients (wake-up, network change).
     pub async fn reconnect_all(&mut self) {
         let names = self.stop_all().await;
         self.clients.clear();
@@ -143,8 +143,8 @@ impl Manager {
         }
     }
 
-    /// Remplace la config (fichier édité à la main). Les Forwards Actifs restés identiques
-    /// sont relancés ; ceux supprimés ou modifiés deviennent Inactifs.
+    /// Replaces the config (hand-edited file). Active Forwards left unchanged are
+    /// restarted; deleted or modified ones become Inactive.
     pub async fn replace_config(&mut self, config: Config) {
         let keep: Vec<String> = self
             .running
@@ -161,7 +161,7 @@ impl Manager {
         }
     }
 
-    /// Arrête tous les Forwards Actifs, attend leur fin, renvoie leurs noms.
+    /// Stops every Active Forward, waits for them to finish, returns their names.
     async fn stop_all(&mut self) -> Vec<String> {
         let mut names: Vec<String> = self.running.keys().cloned().collect();
         names.sort();
@@ -173,10 +173,10 @@ impl Manager {
         names
     }
 
-    /// Annule un Forward, publie Inactif et rend sa tâche pour qui veut attendre sa fin.
+    /// Cancels a Forward, publishes Inactive and returns its task for whoever wants to await it.
     fn stop(&mut self, name: &str) -> Option<JoinHandle<()>> {
         let task = self.running.remove(name).map(|(token, task)| {
-            // Annuler avant d'écrire : un rapport tardif verra le jeton annulé.
+            // Cancel before writing: a late report will see the cancelled token.
             token.cancel();
             task
         });
@@ -191,7 +191,7 @@ impl Manager {
         task
     }
 
-    /// Publie l'État réel d'un Forward, sauf s'il a été désactivé entre-temps.
+    /// Publishes a Forward's Actual state, unless it was deactivated in the meantime.
     fn reporter(&self, name: &str, token: CancellationToken) -> forward::Report {
         let status = self.status.clone();
         let name = name.to_owned();
@@ -209,7 +209,7 @@ impl Manager {
         })
     }
 
-    /// Branche le Délai d'inactivité d'un Forward sur les statuts et sur `take_expired`.
+    /// Wires a Forward's Idle timeout to the statuses and to `take_expired`.
     fn idle(
         &self,
         name: &str,
@@ -242,7 +242,7 @@ impl Manager {
         }
     }
 
-    /// Noms des Contextes du kubeconfig, triés.
+    /// Names of the kubeconfig Contexts, sorted.
     pub fn contexts(&self) -> Result<Vec<String>, Reason> {
         let mut names: Vec<String> = self
             .read_kubeconfig()?
@@ -254,7 +254,7 @@ impl Manager {
         Ok(names)
     }
 
-    /// Client du Contexte, mis en cache ; pour les appels ponctuels du formulaire.
+    /// Cached client for the Context; for the form's one-off calls.
     pub async fn client(&mut self, context: &str) -> Result<Client, Reason> {
         if let Some(client) = self.clients.get(context) {
             return Ok(client.clone());
@@ -284,8 +284,8 @@ impl Manager {
         Ok(client)
     }
 
-    /// Ordre de priorité : réglage `kubeconfig` de la config, `KUBECONFIG` du shell de
-    /// login, puis comportement standard (`KUBECONFIG` du process, `~/.kube/config`).
+    /// Priority order: the config's `kubeconfig` setting, the login shell's `KUBECONFIG`,
+    /// then standard behaviour (the process `KUBECONFIG`, `~/.kube/config`).
     fn read_kubeconfig(&self) -> Result<Kubeconfig, Reason> {
         let paths: Vec<PathBuf> = match &self.config.kubeconfig {
             Some(path) => vec![path.clone()],
@@ -313,8 +313,8 @@ fn initial_statuses(config: &Config) -> Statuses {
         .collect()
 }
 
-/// Donne aux plugins `exec` (aws, gke-gcloud-auth-plugin…) le `PATH` du shell de login,
-/// sauf s'ils en déclarent déjà un. `Command` cherche alors le binaire dans ce `PATH`.
+/// Gives `exec` plugins (aws, gke-gcloud-auth-plugin…) the login shell's `PATH`,
+/// unless they already declare one. `Command` then looks up the binary in that `PATH`.
 fn inject_exec_path(kubeconfig: &mut Kubeconfig, path: &str) {
     for exec in kubeconfig
         .auth_infos
@@ -347,7 +347,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn injecte_le_path_seulement_aux_plugins_exec_sans_path() {
+    fn injects_path_only_into_exec_plugins_without_one() {
         let mut kc = Kubeconfig::from_yaml(
             r#"
 apiVersion: v1
@@ -358,7 +358,7 @@ users:
       exec:
         apiVersion: client.authentication.k8s.io/v1beta1
         command: aws
-  - name: deja
+  - name: already
     user:
       exec:
         apiVersion: client.authentication.k8s.io/v1beta1
@@ -410,7 +410,7 @@ mod lifecycle_tests {
         Config::parse(&text).unwrap()
     }
 
-    /// Kubeconfig introuvable : chaque activation finit en Erreur, sans cluster ni réseau.
+    /// Kubeconfig not found: every activation ends in Error, with no cluster or network.
     fn manager(config: Config) -> Manager {
         let env = KubeEnv {
             kubeconfig: vec!["/nonexistent/kubeconfig".into()],
@@ -429,7 +429,7 @@ mod lifecycle_tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn activation_sans_kubeconfig_donne_une_erreur() {
+    async fn activation_without_kubeconfig_gives_an_error() {
         let mut m = manager(config(&[("a", "s", 1)]));
         m.activate("a").await.unwrap();
         let status = m.subscribe().borrow()["a"].clone();
@@ -441,31 +441,31 @@ mod lifecycle_tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn rechargement_garde_seulement_les_forwards_inchanges() {
+    async fn reload_keeps_only_unchanged_forwards() {
         let mut m = manager(config(&[
-            ("garde", "s", 1),
-            ("modifie", "s", 2),
-            ("supprime", "s", 3),
+            ("kept", "s", 1),
+            ("modified", "s", 2),
+            ("deleted", "s", 3),
         ]));
-        for name in ["garde", "modifie", "supprime"] {
+        for name in ["kept", "modified", "deleted"] {
             m.activate(name).await.unwrap();
         }
         m.replace_config(config(&[
-            ("garde", "s", 1),
-            ("modifie", "autre", 2),
-            ("nouveau", "s", 4),
+            ("kept", "s", 1),
+            ("modified", "other", 2),
+            ("added", "s", 4),
         ]))
         .await;
-        assert_eq!(active(&m), ["garde"]);
+        assert_eq!(active(&m), ["kept"]);
         let statuses = m.subscribe().borrow().clone();
         assert_eq!(
             statuses.keys().collect::<Vec<_>>(),
-            ["garde", "modifie", "nouveau"]
+            ["added", "kept", "modified"]
         );
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn reconnexion_garde_les_memes_forwards_actifs() {
+    async fn reconnect_keeps_the_same_active_forwards() {
         let mut m = manager(config(&[("a", "s", 1), ("b", "s", 2), ("c", "s", 3)]));
         m.activate("a").await.unwrap();
         m.activate("c").await.unwrap();
@@ -474,7 +474,7 @@ mod lifecycle_tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn activer_un_concurrent_desactive_l_autre() {
+    async fn activating_a_competing_forward_deactivates_the_other() {
         let mut m = manager(config(&[("staging", "s", 5432), ("prod", "s", 5432)]));
         m.activate("staging").await.unwrap();
         let rivals = m.activate("prod").await.unwrap();
@@ -490,11 +490,11 @@ mod idle_tests {
     use super::*;
     use crate::config::{Forward, IdleTimeout, Target};
 
-    /// Avec docker-desktop et tests/fixtures/whoami.yaml appliqué :
+    /// With docker-desktop and tests/fixtures/whoami.yaml applied:
     /// `cargo test -p kubeport-core -- --ignored`
     #[tokio::test(flavor = "current_thread")]
     #[ignore]
-    async fn delai_d_inactivite_sur_docker_desktop() {
+    async fn idle_timeout_on_docker_desktop() {
         let forward = Forward {
             name: "idle".into(),
             context: "docker-desktop".into(),
@@ -516,33 +516,33 @@ mod idle_tests {
         let connected = |s: &Statuses| matches!(s["idle"].real, Some(RealState::Connected { .. }));
         tokio::time::timeout(Duration::from_secs(20), statuses.wait_for(connected))
             .await
-            .expect("Connecté")
+            .expect("Connected")
             .unwrap();
         assert!(
             m.subscribe().borrow()["idle"].idle_deadline.is_some(),
-            "échéance armée"
+            "deadline armed"
         );
 
-        // Une connexion ouverte suspend le délai, même bien au-delà de 2 s.
+        // An open connection suspends the timeout, even well past 2 s.
         let socket = tokio::net::TcpStream::connect(("127.0.0.1", 28090))
             .await
             .unwrap();
         tokio::time::sleep(Duration::from_millis(300)).await;
         assert!(
             m.subscribe().borrow()["idle"].idle_deadline.is_none(),
-            "échéance suspendue"
+            "deadline suspended"
         );
         assert!(
             tokio::time::timeout(Duration::from_secs(3), expired.recv())
                 .await
                 .is_err(),
-            "pas d'expiration pendant une connexion"
+            "no expiry while a connection is open"
         );
 
         drop(socket);
         let name = tokio::time::timeout(Duration::from_secs(10), expired.recv())
             .await
-            .expect("expiration après fermeture")
+            .expect("expiry after close")
             .unwrap();
         assert_eq!(name, "idle");
         m.deactivate(&name);

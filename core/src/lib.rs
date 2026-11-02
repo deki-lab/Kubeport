@@ -1,6 +1,6 @@
-//! Cœur de Kubeport : Forwards, résolution du Pod résolu, États voulu et réel.
+//! Kubeport core: Forwards, Resolved pod resolution, Desired and Actual states.
 //!
-//! Vocabulaire : voir `GLOSSARY.md`. Décisions : voir `docs/adr/`.
+//! Vocabulary: see `GLOSSARY.md`. Decisions: see `docs/adr/`.
 
 pub mod catalog;
 pub mod config;

@@ -1,4 +1,4 @@
 [env]
-# Même cible minimale que l'app (LSMinimumSystemVersion) : sans ça, le code C de
-# ring est compilé pour la version de macOS de la machine de build.
+# Same minimum target as the app (LSMinimumSystemVersion): without it, ring's C code
+# is compiled for the macOS version of the build machine.
 MACOSX_DEPLOYMENT_TARGET = "14.0"

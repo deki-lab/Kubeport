@@ -1,6 +1,6 @@
 name: PR title
 
-# Merge en squash uniquement : le titre de PR devient le commit lu par release-please.
+# Squash merge only: the PR title becomes the commit read by release-please.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]

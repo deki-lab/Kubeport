@@ -5,3 +5,4 @@
 .swiftpm/
 /app/KubeportFFI.xcframework/
 /app/Sources/Kubeport/Generated/
+.claude/

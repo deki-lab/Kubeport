@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Ce que le formulaire édite.
+/// What the form edits.
 enum FormMode: Equatable {
     case create
     case edit(ForwardView)
     case duplicate(ForwardView)
 }
 
-/// Création et édition d'un Forward, avec des listes remplies depuis le cluster :
-/// Contexte → namespace → Service ou Pod → port distant → port local.
+/// Creating and editing a Forward, with lists filled from the cluster:
+/// Context → namespace → Service or Pod → remote port → local port.
 struct ForwardForm: View {
     let model: CoreModel
     let mode: FormMode
@@ -146,7 +146,7 @@ struct ForwardForm: View {
             && UInt16(remotePort) != nil && UInt16(localPort) != nil
     }
 
-    // MARK: Chargement
+    // MARK: Loading
 
     private func start() async {
         if let source = mode.source {
@@ -179,7 +179,7 @@ struct ForwardForm: View {
                 namespace = namespaces.contains("default") ? "default" : namespaces.first ?? ""
             }
         } catch {
-            // Sans droit de lister les namespaces : saisie libre.
+            // No permission to list namespaces: free text entry.
             namespaces = []
             namespacesError = L("form.namespacesUnavailable", describe(error))
         }
@@ -209,7 +209,7 @@ struct ForwardForm: View {
         if !ports.isEmpty, !ports.contains(remotePort) { remotePort = ports[0] }
     }
 
-    /// Nom pré-rempli `cible:port` et port local = port distant, tant que non modifiés.
+    /// Prefilled name `target:port` and local port = remote port, until edited.
     private func autofill() {
         if !nameEdited, !targetName.isEmpty { name = "\(targetName):\(remotePort)" }
         if !localEdited { localPort = remotePort }

@@ -1,8 +1,8 @@
-//! Environnement du shell de login de l'utilisateur.
+//! Environment of the user's login shell.
 //!
-//! Une app lancée au login n'hérite pas du shell : ni `PATH` (où vivent `aws`,
-//! `gke-gcloud-auth-plugin`, `kubelogin`…), ni `KUBECONFIG`. On les lit une fois au
-//! démarrage en lançant le shell de login.
+//! An app launched at login does not inherit from the shell: neither `PATH` (where `aws`,
+//! `gke-gcloud-auth-plugin`, `kubelogin`… live) nor `KUBECONFIG`. We read them once at
+//! startup by running the login shell.
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -12,15 +12,15 @@ use std::time::{Duration, Instant};
 const MARKER: &str = "__KUBEPORT_ENV__";
 const TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Variables utiles lues dans le shell de login.
+/// Useful variables read from the login shell.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ShellEnv {
     pub path: Option<String>,
     pub kubeconfig: Vec<PathBuf>,
 }
 
-/// Lance `$SHELL -ilc` et lit `PATH` et `KUBECONFIG`. Renvoie un environnement vide
-/// si le shell échoue ou dépasse 5 s : l'app retombe alors sur l'environnement du process.
+/// Runs `$SHELL -ilc` and reads `PATH` and `KUBECONFIG`. Returns an empty environment
+/// if the shell fails or takes over 5 s: the app then falls back to the process environment.
 pub fn login_shell_env() -> ShellEnv {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| {
         let zsh = std::path::Path::new("/bin/zsh");
@@ -58,7 +58,7 @@ pub fn login_shell_env() -> ShellEnv {
     parse(&output)
 }
 
-/// Extrait les valeurs entre marqueurs : les rc files peuvent écrire n'importe quoi autour.
+/// Extracts the values between markers: rc files may print anything around them.
 fn parse(output: &str) -> ShellEnv {
     let mut parts = output.split(MARKER).skip(1);
     let (Some(path), Some(kubeconfig)) = (parts.next(), parts.next()) else {
@@ -77,9 +77,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ignore_le_bruit_des_rc_files() {
+    fn ignores_rc_file_noise() {
         let out = format!(
-            "Bienvenue !\n{MARKER}/opt/homebrew/bin:/usr/bin{MARKER}/a/config:/b/config{MARKER}"
+            "Welcome!\n{MARKER}/opt/homebrew/bin:/usr/bin{MARKER}/a/config:/b/config{MARKER}"
         );
         let env = parse(&out);
         assert_eq!(env.path.as_deref(), Some("/opt/homebrew/bin:/usr/bin"));
@@ -90,14 +90,14 @@ mod tests {
     }
 
     #[test]
-    fn kubeconfig_vide_et_sortie_illisible() {
+    fn empty_kubeconfig_and_unreadable_output() {
         let env = parse(&format!("{MARKER}/usr/bin{MARKER}{MARKER}"));
         assert!(env.kubeconfig.is_empty());
-        assert_eq!(parse("rien"), ShellEnv::default());
+        assert_eq!(parse("nothing"), ShellEnv::default());
     }
 
     #[test]
-    fn lit_le_vrai_shell_de_login() {
+    fn reads_the_real_login_shell() {
         let env = login_shell_env();
         assert!(env.path.is_some_and(|p| p.contains("/usr/bin")));
     }

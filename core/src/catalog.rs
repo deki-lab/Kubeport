@@ -1,5 +1,5 @@
-//! Ce que propose le cluster au formulaire de création : namespaces, Services, Pods.
-//! Appels `list` ponctuels, faits seulement quand le formulaire en a besoin.
+//! What the cluster offers to the creation form: namespaces, Services, Pods.
+//! One-off `list` calls, made only when the form needs them.
 
 use k8s_openapi::api::core::v1::{Namespace, Pod, Service};
 use kube::api::ListParams;
@@ -8,14 +8,14 @@ use kube::{Api, Client};
 use crate::config::Target;
 use crate::resolve::service_backend;
 
-/// Port proposé pour une Cible : numéro et nom éventuel.
+/// Port offered for a Target: number and optional name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortChoice {
     pub port: u16,
     pub name: Option<String>,
 }
 
-/// Cible proposée : un Service forwardable ou un Pod en cours d'exécution.
+/// Offered Target: a forwardable Service or a running Pod.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetChoice {
     pub target: Target,
@@ -36,7 +36,7 @@ pub async fn namespaces(client: Client) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-/// Services forwardables (ni `ExternalName`, ni sans selector) puis Pods `Running`.
+/// Forwardable Services (neither `ExternalName` nor selector-less), then `Running` Pods.
 pub async fn targets(client: Client, namespace: &str) -> Result<Vec<TargetChoice>, String> {
     let services = Api::<Service>::namespaced(client.clone(), namespace)
         .list(&ListParams::default())
@@ -76,7 +76,7 @@ pub(crate) fn service_choice(service: &Service) -> Option<TargetChoice> {
             })
         })
         .collect();
-    // Même règle qu'à l'activation : un Service sans pods derrière n'est pas proposé.
+    // Same rule as on activation: a Service with no pods behind it is not offered.
     let first = ports.first()?;
     service_backend(service, first.port).ok()?;
     Some(TargetChoice {
@@ -133,10 +133,10 @@ mod tests {
     }
 
     #[test]
-    fn ne_propose_que_les_services_forwardables() {
+    fn offers_only_forwardable_services() {
         assert!(service_choice(&service("web", None, true)).is_some());
         assert!(service_choice(&service("ext", Some("ExternalName"), true)).is_none());
-        assert!(service_choice(&service("manuel", None, false)).is_none());
+        assert!(service_choice(&service("manual", None, false)).is_none());
         let web = service_choice(&service("web", None, true)).unwrap();
         assert_eq!(
             web.ports,

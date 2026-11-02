@@ -3,14 +3,14 @@ resolver = "3"
 members = ["core", "cli", "ffi"]
 
 [workspace.package]
-# La version de l'app vit dans version.txt (gérée par release-please).
-# Les crates internes ne sont pas publiées : leur version reste figée.
+# The app version lives in version.txt (managed by release-please).
+# Internal crates are not published: their version stays frozen.
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [profile.release]
-# Empreinte mémoire et taille minimales (ADR-0003).
+# Minimal memory footprint and binary size (ADR-0003).
 opt-level = "s"
 lto = true
 codegen-units = 1

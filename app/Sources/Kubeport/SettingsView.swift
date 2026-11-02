@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Réglages : lancement au login et kubeconfig forcé.
+/// Settings: launch at login and forced kubeconfig.
 struct SettingsView: View {
     let model: CoreModel
     let close: () -> Void

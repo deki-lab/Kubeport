@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Écran affiché dans le panneau : la liste, le formulaire ou les réglages.
+/// Screen shown in the panel: the list, the form or the settings.
 enum Screen: Equatable {
     case list
     case form(FormMode)
     case settings
 }
 
-/// Panneau sous l'icône : Forwards groupés par Contexte puis namespace.
+/// Panel under the icon: Forwards grouped by Context, then namespace.
 struct PanelView: View {
     let model: CoreModel
     @State private var screen: Screen = .list

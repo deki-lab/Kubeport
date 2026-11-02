@@ -1,21 +1,21 @@
-//! États d'un Forward : État voulu (le bouton) et État réel (le tunnel).
+//! States of a Forward: Desired state (the toggle) and Actual state (the tunnel).
 //!
-//! Les causes sont typées (`Reason`) : l'interface les traduit dans la langue de la
-//! machine. `Display` donne un texte anglais pour la CLI et les journaux.
+//! Causes are typed (`Reason`): the UI translates them into the machine's language.
+//! `Display` gives English text for the CLI and the logs.
 
 use std::fmt;
 
-/// Cause d'une Reconnexion ou d'une Erreur.
+/// Cause of a Reconnecting or Error state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reason {
-    // Causes passagères (Reconnexion).
+    // Transient causes (Reconnecting).
     ConnectingToCluster,
     SearchingPod,
     NoReadyPod,
     PodNotReady { pod: String },
     ApiUnreachable { detail: String },
     ApiError { code: u16, detail: String },
-    // Causes qui demandent une action humaine (Erreur).
+    // Causes that need human action (Error).
     PortInUse { port: u16 },
     PortUnavailable { port: u16, detail: String },
     AuthFailed { detail: String },
@@ -61,24 +61,24 @@ impl fmt::Display for Reason {
     }
 }
 
-/// État réel d'un Forward Actif.
+/// Actual state of an Active Forward.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RealState {
-    /// Le port local écoute et un Pod résolu reçoit les nouvelles connexions.
+    /// The local port is listening and a Resolved pod receives new connections.
     Connected { pod: String },
-    /// Cause passagère : l'app réessaie seule.
+    /// Transient cause: the app retries on its own.
     Reconnecting(Reason),
-    /// Cause qui demande une action humaine : plus de nouvelle tentative.
+    /// Cause that needs human action: no more retries.
     Error(Reason),
 }
 
-/// Vue publique d'un Forward : État voulu et, s'il est Actif, État réel.
+/// Public view of a Forward: Desired state and, if Active, Actual state.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ForwardStatus {
     pub active: bool,
     pub real: Option<RealState>,
-    /// Moment où le Délai d'inactivité passera ce Forward Inactif, si aucune connexion
-    /// n'est ouverte d'ici là.
+    /// When the Idle timeout will make this Forward Inactive, if no connection
+    /// is opened before then.
     pub idle_deadline: Option<std::time::SystemTime>,
 }
 
