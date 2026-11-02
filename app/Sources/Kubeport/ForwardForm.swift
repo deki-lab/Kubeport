@@ -36,8 +36,10 @@ struct ForwardForm: View {
     @State private var confirmDelete = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+        ScreenHeader(title: title, back: close)
+        Divider()
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
 
             Form {
                 Picker(L("form.context"), selection: $context) {
@@ -102,20 +104,32 @@ struct ForwardForm: View {
                 Text(error).font(.caption).foregroundStyle(.red).lineLimit(3)
             }
 
+            if case .edit(let forward) = mode, confirmDelete {
+                // Separate confirmation line: a double click on Delete cannot delete.
+                HStack {
+                    Text(L("form.deleteQuestion", forward.name)).font(.callout)
+                    Spacer()
+                    Button(L("form.cancel")) { confirmDelete = false }
+                    Button(L("form.delete"), role: .destructive) { delete(forward) }
+                }
+                .controlSize(.small)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.08)))
+            }
+
             HStack {
-                if case .edit(let forward) = mode {
-                    Button(confirmDelete ? L("form.confirmDelete") : L("form.delete"), role: .destructive) {
-                        if confirmDelete { delete(forward) } else { confirmDelete = true }
-                    }
+                if case .edit = mode, !confirmDelete {
+                    Button(L("form.delete"), role: .destructive) { confirmDelete = true }
                 }
                 Spacer()
-                Button(L("form.cancel"), action: close).keyboardShortcut(.cancelAction)
+                Button(L("form.cancel"), action: close)
                 Button(L("form.save"), action: save)
                     .keyboardShortcut(.defaultAction)
                     .disabled(saving || !isComplete)
             }
         }
         .padding(12)
+        }
         .task { await start() }
         .onChange(of: context) { _, value in Task { await loadNamespaces(value) } }
         .onChange(of: namespace) { _, value in Task { await loadTargets(context, value) } }

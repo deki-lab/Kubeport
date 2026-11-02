@@ -1,20 +1,12 @@
 /* Kubeport — English (development language). Keys are checked by scripts/check-l10n.py. */
 
 /* Panel */
-"panel.empty" = "No Forwards yet.\nCreate one with “New Forward”.";
 "menu.edit" = "Edit…";
 "menu.duplicate" = "Duplicate…";
-"row.reconnecting" = "Reconnecting: %1$@";
-"row.error" = "Error: %1$@";
-"row.local" = "localhost:%1$@";
-"tooltip.target" = "localhost:%1$@ → %2$@/%3$@:%4$@";
-"tooltip.resolvedPod" = "Resolved pod: %1$@";
-"tooltip.hint" = "Right-click: edit, duplicate";
-"footer.new" = "New Forward";
-"footer.deactivateAll" = "Deactivate all";
+"footer.new" = "New Forward…";
 "footer.openConfig" = "Open config";
-"footer.reload" = "Reload";
-"footer.settings" = "Settings";
+"footer.reload" = "Reload Config";
+"footer.settings" = "Kubeport Settings…";
 "footer.quit" = "Quit Kubeport";
 
 /* Form */
@@ -31,7 +23,6 @@
 "form.localPort" = "Local port";
 "form.name" = "Name";
 "form.delete" = "Delete";
-"form.confirmDelete" = "Confirm deletion";
 "form.cancel" = "Cancel";
 "form.save" = "Save";
 "form.namespacesUnavailable" = "Namespaces not listed (%1$@): type it in.";
@@ -44,8 +35,6 @@
 "settings.needsApproval" = "Allow it in System Settings > General > Login Items.";
 "settings.kubeconfig" = "Kubeconfig";
 "settings.kubeconfigPlaceholder" = "Default: shell KUBECONFIG, then ~/.kube/config";
-"settings.close" = "Close";
-"settings.save" = "Save";
 
 /* Notifications and notices */
 "notification.errorTitle" = "Kubeport: %1$@ failed";
@@ -97,3 +86,35 @@
 /* Menu bar icon (VoiceOver) */
 "icon.label" = "Kubeport";
 "icon.labelError" = "Kubeport: error";
+
+/* Wi-Fi style panel */
+"panel.loading" = "Loading Forwards…";
+"panel.noActive" = "No Active Forwards";
+"panel.inactive" = "Inactive Forwards";
+"master.label" = "All Forwards";
+"master.help" = "Off: deactivate every Forward. On: bring back the ones that were Active.";
+"a11y.expanded" = "Expanded";
+"a11y.collapsed" = "Collapsed";
+"row.switch" = "Activate the Forward %1$@";
+"row.detailsHint" = "Shows the details";
+"state.connected" = "Connected";
+"state.reconnecting" = "Reconnecting";
+"state.error" = "Error";
+"state.inactive" = "Inactive";
+"detail.target" = "Target";
+"detail.resolvedPod" = "Resolved pod";
+"detail.address" = "Address";
+"detail.copy" = "Copy";
+"detail.autoDeactivate" = "Auto-deactivate";
+"empty.title" = "No Forwards";
+"empty.body" = "A Forward links a local port to a Service or a Pod in a Kubernetes cluster.";
+"empty.create" = "Create a Forward";
+"startError.title" = "Kubeport could not read its config";
+"startError.retry" = "Try Again";
+"notice.dismiss" = "Dismiss";
+"header.back" = "Forwards";
+"settings.choose" = "Choose…";
+"settings.kubeconfigHint" = "Leave empty: shell KUBECONFIG, then ~/.kube/config. Active Forwards are restarted.";
+"settings.apply" = "Apply";
+"settings.applied" = "Kubeconfig applied";
+"form.deleteQuestion" = "Delete “%1$@”?";
