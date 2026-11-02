@@ -40,6 +40,7 @@ extension Notice {
         case .unknownForward(let name): L("notice.unknownForward", name)
         case .configNotReloaded(let detail): L("notice.configNotReloaded", detail)
         case .coreStartFailed(let detail): L("notice.coreStartFailed", detail)
+        case .idleDeactivated(let name, let minutes): L("notice.idleDeactivated", name, idleDuration(minutes))
         }
     }
 }
@@ -52,6 +53,29 @@ extension FormField {
         case .namespace: L("form.namespace")
         case .target: L("form.target")
         }
+    }
+}
+
+/// « 15 min », « 1 h », « 4 h ».
+func idleDuration(_ minutes: UInt32) -> String {
+    minutes % 60 == 0 ? L("idle.hours", String(minutes / 60)) : L("idle.minutes", String(minutes))
+}
+
+/// Choix proposés pour le Délai d'inactivité, en minutes.
+let idleChoices: [UInt32] = [15, 60, 240]
+
+/// Libellé d'un réglage par défaut : « Jamais » ou une durée.
+func idleDefaultLabel(_ minutes: UInt32?) -> String {
+    minutes.map(idleDuration) ?? L("idle.never")
+}
+
+extension ForwardView {
+    /// « Inactif dans 12 min » quand une échéance court, sinon `nil`.
+    var idleCountdown: String? {
+        guard active, let deadline = idleDeadlineUnix else { return nil }
+        let seconds = Double(deadline) - Date().timeIntervalSince1970
+        let minutes = UInt32(max(1, (seconds / 60).rounded(.up)))
+        return L("idle.countdown", idleDuration(minutes))
     }
 }
 

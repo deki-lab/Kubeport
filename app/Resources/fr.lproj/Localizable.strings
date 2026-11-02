@@ -55,6 +55,17 @@
 "notice.configNotReloaded" = "Config non rechargée : %1$@";
 "notice.coreStartFailed" = "Le cœur de Kubeport n'a pas démarré : %1$@";
 
+/* Idle timeout */
+"form.idleTimeout" = "Désactivation auto";
+"settings.idleTimeout" = "Désactivation auto par défaut";
+"settings.idleTimeoutHint" = "Un Forward Actif sans connexion ouverte pendant cette durée passe Inactif.";
+"idle.never" = "Jamais";
+"idle.inherit" = "Par défaut (%1$@)";
+"idle.minutes" = "%1$@ min";
+"idle.hours" = "%1$@ h";
+"idle.countdown" = "Inactif dans %1$@";
+"notice.idleDeactivated" = "%1$@ désactivé après %2$@ sans connexion";
+
 /* Erreurs */
 "error.duplicateName" = "Un Forward nommé « %1$@ » existe déjà.";
 "error.missingField" = "Champ requis : %1$@.";

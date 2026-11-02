@@ -8,10 +8,14 @@
 //! service = "postgres"     # ou : pod = "postgres-0"
 //! remote_port = 5432
 //! local_port = 5432        # optionnel, vaut remote_port par défaut
+//! idle_timeout = 60        # optionnel : minutes, ou "never" ; absent : réglage par défaut
 //! ```
+//!
+//! En tête de fichier, `idle_timeout = 60` fixe le Délai d'inactivité par défaut.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +24,18 @@ use serde::{Deserialize, Serialize};
 pub enum Target {
     Service(String),
     Pod(String),
+}
+
+/// Délai d'inactivité propre à un Forward.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IdleTimeout {
+    /// Suit le réglage par défaut de la config.
+    #[default]
+    Inherit,
+    /// Jamais désactivé automatiquement.
+    Never,
+    /// Désactivé après cette durée sans connexion ouverte.
+    After(Duration),
 }
 
 /// Un port-forward configuré. Son `name` l'identifie de façon unique.
@@ -32,6 +48,7 @@ pub struct Forward {
     pub target: Target,
     pub remote_port: u16,
     pub local_port: u16,
+    pub idle_timeout: IdleTimeout,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,6 +56,13 @@ pub struct Config {
     /// Réglage : kubeconfig forcé. Absent : celui du shell de login, puis `~/.kube/config`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kubeconfig: Option<PathBuf>,
+    /// Réglage : Délai d'inactivité par défaut, en minutes. Absent : jamais.
+    #[serde(
+        default,
+        rename = "idle_timeout",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub idle_timeout_minutes: Option<u32>,
     #[serde(default, rename = "forward")]
     pub forwards: Vec<Forward>,
 }
@@ -162,6 +186,18 @@ impl Config {
         self.forwards.retain(|f| f.name != name);
     }
 
+    /// Délai d'inactivité effectif d'un Forward ; `None` : jamais.
+    pub fn idle_timeout(&self, forward: &Forward) -> Option<Duration> {
+        match forward.idle_timeout {
+            IdleTimeout::Inherit => self
+                .idle_timeout_minutes
+                .filter(|m| *m > 0)
+                .map(|m| Duration::from_secs(u64::from(m) * 60)),
+            IdleTimeout::Never => None,
+            IdleTimeout::After(d) => Some(d),
+        }
+    }
+
     pub fn get(&self, name: &str) -> Option<&Forward> {
         self.forwards.iter().find(|f| f.name == name)
     }
@@ -213,6 +249,16 @@ struct RawForward {
     remote_port: u16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     local_port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    idle_timeout: Option<RawIdle>,
+}
+
+/// `idle_timeout = 60` (minutes) ou `idle_timeout = "never"`.
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum RawIdle {
+    Minutes(u32),
+    Keyword(String),
 }
 
 impl TryFrom<RawForward> for Forward {
@@ -232,6 +278,18 @@ impl TryFrom<RawForward> for Forward {
         if raw.remote_port == 0 || raw.local_port == Some(0) {
             return Err(format!("Forward {:?}: port 0 is not allowed", raw.name));
         }
+        let idle_timeout = match raw.idle_timeout {
+            None => IdleTimeout::Inherit,
+            Some(RawIdle::Minutes(0)) => IdleTimeout::Never,
+            Some(RawIdle::Minutes(m)) => IdleTimeout::After(Duration::from_secs(u64::from(m) * 60)),
+            Some(RawIdle::Keyword(k)) if k == "never" => IdleTimeout::Never,
+            Some(RawIdle::Keyword(k)) => {
+                return Err(format!(
+                    "Forward {:?}: idle_timeout must be minutes or \"never\", not {k:?}",
+                    raw.name
+                ));
+            }
+        };
         Ok(Forward {
             local_port: raw.local_port.unwrap_or(raw.remote_port),
             name: raw.name,
@@ -239,6 +297,7 @@ impl TryFrom<RawForward> for Forward {
             namespace: raw.namespace,
             target,
             remote_port: raw.remote_port,
+            idle_timeout,
         })
     }
 }
@@ -249,7 +308,15 @@ impl From<Forward> for RawForward {
             Target::Service(s) => (Some(s), None),
             Target::Pod(p) => (None, Some(p)),
         };
+        let idle_timeout = match f.idle_timeout {
+            IdleTimeout::Inherit => None,
+            IdleTimeout::Never => Some(RawIdle::Keyword("never".into())),
+            IdleTimeout::After(d) => Some(RawIdle::Minutes(
+                u32::try_from(d.as_secs().div_ceil(60)).unwrap_or(u32::MAX),
+            )),
+        };
         RawForward {
+            idle_timeout,
             local_port: (f.local_port != f.remote_port).then_some(f.local_port),
             name: f.name,
             context: f.context,
@@ -375,6 +442,47 @@ remote_port = 80
         assert!(text.starts_with("# Kubeport Forwards"));
         assert_eq!(Config::load(&path).unwrap(), config);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn delai_d_inactivite_par_defaut_et_par_forward() {
+        let text = r#"
+idle_timeout = 60
+
+[[forward]]
+name = "herite"
+context = "c"
+namespace = "n"
+service = "s"
+remote_port = 80
+
+[[forward]]
+name = "jamais"
+context = "c"
+namespace = "n"
+service = "s"
+remote_port = 81
+idle_timeout = "never"
+
+[[forward]]
+name = "court"
+context = "c"
+namespace = "n"
+service = "s"
+remote_port = 82
+idle_timeout = 15
+"#;
+        let config = Config::parse(text).unwrap();
+        let minutes = |name: &str| {
+            config
+                .idle_timeout(config.get(name).unwrap())
+                .map(|d| d.as_secs() / 60)
+        };
+        assert_eq!(minutes("herite"), Some(60));
+        assert_eq!(minutes("jamais"), None);
+        assert_eq!(minutes("court"), Some(15));
+        assert_eq!(Config::parse(&config.to_toml().unwrap()).unwrap(), config);
+        assert!(Config::parse(&text.replace("\"never\"", "\"bientot\"")).is_err());
     }
 
     #[test]

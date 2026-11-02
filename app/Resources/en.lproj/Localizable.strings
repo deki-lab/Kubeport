@@ -55,6 +55,17 @@
 "notice.configNotReloaded" = "Config not reloaded: %1$@";
 "notice.coreStartFailed" = "Kubeport core failed to start: %1$@";
 
+/* Idle timeout */
+"form.idleTimeout" = "Auto-deactivate";
+"settings.idleTimeout" = "Auto-deactivate by default";
+"settings.idleTimeoutHint" = "An Active Forward with no open connection for this long becomes Inactive.";
+"idle.never" = "Never";
+"idle.inherit" = "Default (%1$@)";
+"idle.minutes" = "%1$@ min";
+"idle.hours" = "%1$@ h";
+"idle.countdown" = "Inactive in %1$@";
+"notice.idleDeactivated" = "%1$@ deactivated after %2$@ with no connection";
+
 /* Errors */
 "error.duplicateName" = "A Forward named “%1$@” already exists.";
 "error.missingField" = "Required field: %1$@.";

@@ -18,6 +18,10 @@ _Avoid_: target, destination, backend
 Le contexte kubeconfig (cluster + utilisateur) figé dans un Forward, indépendant du `current-context` du terminal.
 _Avoid_: cluster, environnement
 
+**Délai d'inactivité**:
+Durée sans aucune connexion ouverte après laquelle un Forward Actif passe Inactif de lui-même ; réglé par défaut, et remplaçable par Forward (« Jamais » possible).
+_Avoid_: timeout, auto-disconnect, expiration
+
 **Forwards concurrents**:
 Des Forwards qui partagent le même port local ; au plus un d'entre eux est Actif à la fois.
 _Avoid_: conflit de port, doublon
@@ -51,4 +55,4 @@ _Avoid_: échec, crash
 ## Interface en anglais
 
 L'app suit la langue de macOS (anglais par défaut). Termes affichés en anglais :
-Forward, Target (Cible), Context (Contexte), Resolved pod (Pod résolu), Active / Inactive (Actif / Inactif), Connected / Reconnecting / Error (Connecté / Reconnexion / Erreur).
+Forward, Target (Cible), Context (Contexte), Resolved pod (Pod résolu), Active / Inactive (Actif / Inactif), Connected / Reconnecting / Error (Connecté / Reconnexion / Erreur), Auto-deactivate (Délai d'inactivité).
