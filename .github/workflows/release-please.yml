@@ -25,9 +25,7 @@ jobs:
   build-dmg:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
-    # Self-hosted runners (maintainer's Mac) while the repo is private: GitHub cancels
-    # macos-15 arm64 jobs for lack of capacity. Switch back to `macos-15` before going public.
-    runs-on: [self-hosted, macOS, ARM64, kubeport]
+    runs-on: macos-15
     outputs:
       sha256: ${{ steps.dmg.outputs.sha256 }}
     steps:
@@ -36,8 +34,6 @@ jobs:
           ref: ${{ needs.release-please.outputs.tag_name }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-        # On the maintainer's Mac, keep their rustup as is.
-        if: runner.environment == 'github-hosted'
         with:
           toolchain: stable
       - id: dmg
