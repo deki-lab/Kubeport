@@ -17,8 +17,8 @@ cargo build -q -p kubeport-cli --manifest-path "$ROOT/Cargo.toml"
 PID=$!
 trap 'kill $PID 2>/dev/null || true' EXIT
 
-for _ in $(seq 50); do grep -q 'Connecté' "$LOG" && break; sleep 0.2; done
-grep -q 'Connecté' "$LOG" || { echo "ÉCHEC : jamais Connecté"; cat "$LOG"; exit 1; }
+for _ in $(seq 50); do grep -q 'Connected' "$LOG" && break; sleep 0.2; done
+grep -q 'Connected' "$LOG" || { echo "ÉCHEC : jamais Connected"; cat "$LOG"; exit 1; }
 
 before="$(curl -sf --max-time 2 http://127.0.0.1:18080/ | awk '/^Hostname:/ {print $2}')"
 echo "avant rollout : $before"

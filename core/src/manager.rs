@@ -13,13 +13,13 @@ use tokio_util::sync::CancellationToken;
 use crate::config::Config;
 use crate::forward;
 use crate::shell_env::ShellEnv;
-use crate::state::{ForwardStatus, RealState};
+use crate::state::{ForwardStatus, RealState, Reason};
 
 pub type Statuses = BTreeMap<String, ForwardStatus>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ManagerError {
-    #[error("aucun Forward nommé « {0} »")]
+    #[error("no Forward named {0:?}")]
     UnknownForward(String),
 }
 
@@ -96,7 +96,7 @@ impl Manager {
 
         let token = CancellationToken::new();
         let report = self.reporter(name, token.clone());
-        report(RealState::Reconnecting("connexion au cluster".into()));
+        report(RealState::Reconnecting(Reason::ConnectingToCluster));
 
         let task = match self.client(&forward.context).await {
             Ok(client) => tokio::spawn(forward::run(forward, client, report, token.clone())),
@@ -200,7 +200,7 @@ impl Manager {
     }
 
     /// Noms des Contextes du kubeconfig, triés.
-    pub fn contexts(&self) -> Result<Vec<String>, String> {
+    pub fn contexts(&self) -> Result<Vec<String>, Reason> {
         let mut names: Vec<String> = self
             .read_kubeconfig()?
             .contexts
@@ -212,13 +212,15 @@ impl Manager {
     }
 
     /// Client du Contexte, mis en cache ; pour les appels ponctuels du formulaire.
-    pub async fn client(&mut self, context: &str) -> Result<Client, String> {
+    pub async fn client(&mut self, context: &str) -> Result<Client, Reason> {
         if let Some(client) = self.clients.get(context) {
             return Ok(client.clone());
         }
         let mut kubeconfig = self.read_kubeconfig()?;
         if !kubeconfig.contexts.iter().any(|c| c.name == context) {
-            return Err(format!("Contexte {context} absent du kubeconfig"));
+            return Err(Reason::ContextMissing {
+                context: context.to_owned(),
+            });
         }
         if let Some(path) = &self.env.exec_path {
             inject_exec_path(&mut kubeconfig, path);
@@ -229,15 +231,19 @@ impl Manager {
         };
         let config = KubeConfig::from_custom_kubeconfig(kubeconfig, &options)
             .await
-            .map_err(|e| format!("Contexte {context} : {e}"))?;
-        let client = Client::try_from(config).map_err(|e| format!("Contexte {context} : {e}"))?;
+            .map_err(|e| Reason::Kubeconfig {
+                detail: format!("{context}: {e}"),
+            })?;
+        let client = Client::try_from(config).map_err(|e| Reason::Kubeconfig {
+            detail: format!("{context}: {e}"),
+        })?;
         self.clients.insert(context.to_owned(), client.clone());
         Ok(client)
     }
 
     /// Ordre de priorité : réglage `kubeconfig` de la config, `KUBECONFIG` du shell de
     /// login, puis comportement standard (`KUBECONFIG` du process, `~/.kube/config`).
-    fn read_kubeconfig(&self) -> Result<Kubeconfig, String> {
+    fn read_kubeconfig(&self) -> Result<Kubeconfig, Reason> {
         let paths: Vec<PathBuf> = match &self.config.kubeconfig {
             Some(path) => vec![path.clone()],
             None => self.env.kubeconfig.clone(),
@@ -250,7 +256,9 @@ impl Manager {
                 .map(Kubeconfig::read_from)
                 .try_fold(Kubeconfig::default(), |acc, next| acc.merge(next?))
         };
-        result.map_err(|e| format!("kubeconfig : {e}"))
+        result.map_err(|e| Reason::Kubeconfig {
+            detail: e.to_string(),
+        })
     }
 }
 
@@ -383,7 +391,10 @@ mod lifecycle_tests {
         m.activate("a").await.unwrap();
         let status = m.subscribe().borrow()["a"].clone();
         assert!(status.active);
-        assert!(matches!(status.real, Some(RealState::Error(r)) if r.contains("kubeconfig")));
+        assert!(matches!(
+            status.real,
+            Some(RealState::Error(Reason::Kubeconfig { .. }))
+        ));
     }
 
     #[tokio::test(flavor = "current_thread")]

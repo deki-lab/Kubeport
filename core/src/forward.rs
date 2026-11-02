@@ -17,30 +17,35 @@ use tokio_util::sync::CancellationToken;
 
 use crate::config::{Forward, Target};
 use crate::resolve::{PortRef, Resolved, resolve, service_backend};
-use crate::state::RealState;
+use crate::state::{RealState, Reason};
 
 pub(crate) type Report = Arc<dyn Fn(RealState) + Send + Sync>;
 
 /// Erreur classée : `Fatal` demande une action humaine, `Transient` se répare seule.
 enum Fault {
-    Fatal(String),
-    Transient(String),
+    Fatal(Reason),
+    Transient(Reason),
 }
 
 fn classify(err: &kube::Error) -> Fault {
     match err {
         kube::Error::Api(status) => classify_status(status.code, &status.message),
-        kube::Error::Auth(e) => Fault::Fatal(format!("authentification : {e}")),
-        other => Fault::Transient(format!("API injoignable : {other}")),
+        kube::Error::Auth(e) => Fault::Fatal(Reason::AuthFailed {
+            detail: e.to_string(),
+        }),
+        other => Fault::Transient(Reason::ApiUnreachable {
+            detail: other.to_string(),
+        }),
     }
 }
 
 fn classify_status(code: u16, message: &str) -> Fault {
+    let detail = message.to_owned();
     match code {
-        401 => Fault::Fatal(format!("authentification refusée : {message}")),
-        403 => Fault::Fatal(format!("accès refusé : {message}")),
-        404 => Fault::Fatal(format!("introuvable : {message}")),
-        _ => Fault::Transient(format!("erreur API {code} : {message}")),
+        401 => Fault::Fatal(Reason::AuthFailed { detail }),
+        403 => Fault::Fatal(Reason::AccessDenied { detail }),
+        404 => Fault::Fatal(Reason::NotFound { detail }),
+        _ => Fault::Transient(Reason::ApiError { code, detail }),
     }
 }
 
@@ -50,7 +55,9 @@ fn classify_watch(err: &watcher::Error) -> Fault {
         | watcher::Error::WatchStartFailed(e)
         | watcher::Error::WatchFailed(e) => classify(e),
         watcher::Error::WatchError(status) => classify_status(status.code, &status.message),
-        watcher::Error::NoResourceVersion => Fault::Transient(err.to_string()),
+        watcher::Error::NoResourceVersion => Fault::Transient(Reason::ApiUnreachable {
+            detail: err.to_string(),
+        }),
     }
 }
 
@@ -72,16 +79,15 @@ async fn serve(forward: &Forward, client: Client, report: &Report) {
     let listener = match TcpListener::bind((Ipv4Addr::LOCALHOST, forward.local_port)).await {
         Ok(l) => l,
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
-            return report(RealState::Error(format!(
-                "port {} occupé",
-                forward.local_port
-            )));
+            return report(RealState::Error(Reason::PortInUse {
+                port: forward.local_port,
+            }));
         }
         Err(e) => {
-            return report(RealState::Error(format!(
-                "port {} : {e}",
-                forward.local_port
-            )));
+            return report(RealState::Error(Reason::PortUnavailable {
+                port: forward.local_port,
+                detail: e.to_string(),
+            }));
         }
     };
 
@@ -95,19 +101,19 @@ async fn serve(forward: &Forward, client: Client, report: &Report) {
             (
                 watcher::Config::default().labels(&backend.selector),
                 backend.port,
-                "aucun pod Ready".to_owned(),
+                Reason::NoReadyPod,
             )
         }
         Target::Pod(name) => (
             watcher::Config::default().fields(&format!("metadata.name={name}")),
             PortRef::Number(forward.remote_port),
-            format!("pod {name} introuvable ou pas Ready"),
+            Reason::PodNotReady { pod: name.clone() },
         ),
     };
 
-    report(RealState::Reconnecting("recherche d'un pod Ready".into()));
+    report(RealState::Reconnecting(Reason::SearchingPod));
     let (resolved_tx, resolved_rx) = watch::channel(None::<Resolved>);
-    let (fatal_tx, mut fatal_rx) = mpsc::channel::<String>(1);
+    let (fatal_tx, mut fatal_rx) = mpsc::channel::<Reason>(1);
 
     tokio::select! {
         () = track_pods(pods.clone(), watch_config, port, missing, resolved_tx, report) => {}
@@ -137,10 +143,14 @@ async fn service_with_retry(
             }
             Err(e) => match classify(&e) {
                 Fault::Fatal(reason) => {
-                    report(RealState::Error(format!(
-                        "Service {}/{name} : {reason}",
-                        forward.namespace
-                    )));
+                    let reason = match reason {
+                        Reason::NotFound { .. } => Reason::ServiceNotFound {
+                            namespace: forward.namespace.clone(),
+                            service: name.to_owned(),
+                        },
+                        other => other,
+                    };
+                    report(RealState::Error(reason));
                     return None;
                 }
                 Fault::Transient(reason) => {
@@ -158,7 +168,7 @@ async fn track_pods(
     pods: Api<Pod>,
     config: watcher::Config,
     port: PortRef,
-    missing: String,
+    missing: Reason,
     resolved_tx: watch::Sender<Option<Resolved>>,
     report: &Report,
 ) {
@@ -216,7 +226,7 @@ async fn accept_loop(
     listener: TcpListener,
     pods: Api<Pod>,
     resolved: watch::Receiver<Option<Resolved>>,
-    fatal: mpsc::Sender<String>,
+    fatal: mpsc::Sender<Reason>,
 ) {
     // Abandonner le JoinSet coupe toutes les connexions quand le Forward s'arrête.
     let mut connections = JoinSet::new();
@@ -232,7 +242,7 @@ async fn accept_loop(
                 let fatal = fatal.clone();
                 connections.spawn(async move {
                     if let Err(e) = pipe(&pods, &target, socket).await {
-                        tracing::warn!(pod = %target.pod, "connexion terminée : {e}");
+                        tracing::warn!(pod = %target.pod, "connection closed: {e}");
                         if let Some(kube_err) = e.downcast_ref::<kube::Error>()
                             && let Fault::Fatal(reason) = classify(kube_err)
                         {
@@ -253,7 +263,7 @@ async fn pipe(pods: &Api<Pod>, target: &Resolved, mut socket: TcpStream) -> Resu
     let mut forwarder = pods.portforward(&target.pod, &[target.port]).await?;
     let mut upstream = forwarder
         .take_stream(target.port)
-        .ok_or("flux de port-forward absent")?;
+        .ok_or("port-forward stream missing")?;
     tokio::io::copy_bidirectional(&mut socket, &mut upstream).await?;
     drop(upstream);
     forwarder.join().await?;

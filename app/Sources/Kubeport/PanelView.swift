@@ -38,7 +38,7 @@ private struct ListScreen: View {
                     .foregroundStyle(.red)
                     .padding(12)
             } else if model.forwards.isEmpty {
-                Text("Aucun Forward.\nCrée-en un avec « Nouveau Forward ».")
+                Text(L("panel.empty"))
                     .foregroundStyle(.secondary)
                     .padding(12)
             } else {
@@ -92,8 +92,8 @@ private struct GroupSection: View {
             ForEach(forwards, id: \.name) { forward in
                 ForwardRow(forward: forward, model: model)
                     .contextMenu {
-                        Button("Modifier…") { navigate(.form(.edit(forward))) }
-                        Button("Dupliquer…") { navigate(.form(.duplicate(forward))) }
+                        Button(L("menu.edit")) { navigate(.form(.edit(forward))) }
+                        Button(L("menu.duplicate")) { navigate(.form(.duplicate(forward))) }
                     }
             }
         }
@@ -117,7 +117,7 @@ private struct ForwardRow: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            Toggle("", isOn: Binding(
+            Toggle(forward.name, isOn: Binding(
                 get: { forward.active },
                 set: { model.setActive(forward, $0) }
             ))
@@ -140,9 +140,9 @@ private struct ForwardRow: View {
 
     private var subtitle: String {
         switch forward.state {
-        case .reconnecting(let reason)?: return "Reconnexion : \(reason)"
-        case .error(let reason)?: return "Erreur : \(reason)"
-        default: return "localhost:\(forward.localPort)"
+        case .reconnecting(let reason)?: return L("row.reconnecting", reason.text)
+        case .error(let reason)?: return L("row.error", reason.text)
+        default: return L("row.local", String(forward.localPort))
         }
     }
 
@@ -152,9 +152,11 @@ private struct ForwardRow: View {
 
     private var tooltip: String {
         let kind = forward.targetKind == .service ? "svc" : "pod"
-        var text = "localhost:\(forward.localPort) → \(kind)/\(forward.targetName):\(forward.remotePort)"
-        if case .connected(let pod)? = forward.state { text += "\nPod résolu : \(pod)" }
-        return text + "\nClic droit : modifier, dupliquer"
+        var lines = [L("tooltip.target",
+                       String(forward.localPort), kind, forward.targetName, String(forward.remotePort))]
+        if case .connected(let pod)? = forward.state { lines.append(L("tooltip.resolvedPod", pod)) }
+        lines.append(L("tooltip.hint"))
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -168,29 +170,29 @@ private struct Footer: View {
                 Button {
                     navigate(.form(.create))
                 } label: {
-                    Label("Nouveau Forward", systemImage: "plus")
+                    Label(L("footer.new"), systemImage: "plus")
                 }
                 .disabled(model.startError != nil)
                 Spacer()
-                Button("Tout désactiver") { model.deactivateAll() }
+                Button(L("footer.deactivateAll")) { model.deactivateAll() }
                     .disabled(model.globalState == .idle)
             }
             HStack(spacing: 4) {
-                Button("Ouvrir la config") { model.openConfig() }
-                Button("Recharger") { model.reload() }
+                Button(L("footer.openConfig")) { model.openConfig() }
+                Button(L("footer.reload")) { model.reload() }
                 Spacer()
                 Button {
                     navigate(.settings)
                 } label: {
                     Image(systemName: "gearshape")
                 }
-                .help("Réglages")
+                .help(L("footer.settings"))
                 Button {
                     NSApplication.shared.terminate(nil)
                 } label: {
                     Image(systemName: "power")
                 }
-                .help("Quitter Kubeport")
+                .help(L("footer.quit"))
                 .keyboardShortcut("q")
             }
         }

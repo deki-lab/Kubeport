@@ -17,7 +17,7 @@ enum StatusIcon {
 
     private static func template(_ symbol: String) -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Kubeport")!
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: L("icon.label"))!
             .withSymbolConfiguration(config)!
         image.isTemplate = true
         return image
@@ -41,7 +41,7 @@ enum StatusIcon {
             return true
         }
         image.isTemplate = false
-        image.accessibilityDescription = "Kubeport : erreur"
+        image.accessibilityDescription = L("icon.labelError")
         return image
     }
 }

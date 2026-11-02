@@ -38,48 +38,48 @@ struct ForwardForm: View {
             Text(title).font(.headline)
 
             Form {
-                Picker("Contexte", selection: $context) {
+                Picker(L("form.context"), selection: $context) {
                     ForEach(contexts, id: \.self) { Text($0).tag($0) }
                 }
 
                 if namespacesError == nil, !namespaces.isEmpty {
-                    Picker("Namespace", selection: $namespace) {
+                    Picker(L("form.namespace"), selection: $namespace) {
                         ForEach(namespaces, id: \.self) { Text($0).tag($0) }
                     }
                 } else {
-                    TextField("Namespace", text: $namespace)
+                    TextField(L("form.namespace"), text: $namespace)
                 }
 
-                Picker("Type", selection: $kind) {
-                    Text("Service").tag(TargetKind.service)
-                    Text("Pod").tag(TargetKind.pod)
+                Picker(L("form.type"), selection: $kind) {
+                    Text(L("form.service")).tag(TargetKind.service)
+                    Text(L("form.pod")).tag(TargetKind.pod)
                 }
                 .pickerStyle(.segmented)
 
                 if !filteredTargets.isEmpty {
-                    Picker(kind == .service ? "Service" : "Pod", selection: $targetName) {
+                    Picker(targetLabel, selection: $targetName) {
                         ForEach(filteredTargets, id: \.name) { Text($0.name).tag($0.name) }
                     }
                 } else {
-                    TextField(kind == .service ? "Service" : "Pod", text: $targetName)
+                    TextField(targetLabel, text: $targetName)
                 }
 
                 if !portOptions.isEmpty {
-                    Picker("Port distant", selection: $remotePort) {
+                    Picker(L("form.remotePort"), selection: $remotePort) {
                         ForEach(portOptions, id: \.port) { port in
                             Text(port.name.map { "\(port.port) (\($0))" } ?? "\(port.port)")
                                 .tag(String(port.port))
                         }
                     }
                 } else {
-                    TextField("Port distant", text: $remotePort)
+                    TextField(L("form.remotePort"), text: $remotePort)
                 }
 
-                TextField("Port local", text: Binding(
+                TextField(L("form.localPort"), text: Binding(
                     get: { localPort },
                     set: { localPort = $0; localEdited = true }
                 ))
-                TextField("Nom", text: Binding(
+                TextField(L("form.name"), text: Binding(
                     get: { name },
                     set: { name = $0; nameEdited = true }
                 ))
@@ -95,13 +95,13 @@ struct ForwardForm: View {
 
             HStack {
                 if case .edit(let forward) = mode {
-                    Button(confirmDelete ? "Confirmer la suppression" : "Supprimer", role: .destructive) {
+                    Button(confirmDelete ? L("form.confirmDelete") : L("form.delete"), role: .destructive) {
                         if confirmDelete { delete(forward) } else { confirmDelete = true }
                     }
                 }
                 Spacer()
-                Button("Annuler", action: close).keyboardShortcut(.cancelAction)
-                Button("Enregistrer", action: save)
+                Button(L("form.cancel"), action: close).keyboardShortcut(.cancelAction)
+                Button(L("form.save"), action: save)
                     .keyboardShortcut(.defaultAction)
                     .disabled(saving || !isComplete)
             }
@@ -117,11 +117,13 @@ struct ForwardForm: View {
 
     private var title: String {
         switch mode {
-        case .create: "Nouveau Forward"
-        case .edit: "Modifier le Forward"
-        case .duplicate: "Dupliquer le Forward"
+        case .create: L("form.title.create")
+        case .edit: L("form.title.edit")
+        case .duplicate: L("form.title.duplicate")
         }
     }
+
+    private var targetLabel: String { kind == .service ? L("form.service") : L("form.pod") }
 
     private var filteredTargets: [TargetOption] { targets.filter { $0.kind == kind } }
 
@@ -139,7 +141,7 @@ struct ForwardForm: View {
 
     private func start() async {
         if let source = mode.source {
-            name = mode == .edit(source) ? source.name : "\(source.name)-copie"
+            name = mode == .edit(source) ? source.name : L("form.copyName", source.name)
             nameEdited = true
             context = source.context
             namespace = source.namespace
@@ -168,7 +170,7 @@ struct ForwardForm: View {
         } catch {
             // Sans droit de lister les namespaces : saisie libre.
             namespaces = []
-            namespacesError = "Namespaces non listés (\(describe(error))) : saisie libre."
+            namespacesError = L("form.namespacesUnavailable", describe(error))
         }
     }
 
@@ -179,7 +181,7 @@ struct ForwardForm: View {
             targetsError = nil
         } catch {
             targets = []
-            targetsError = "Cibles non listées (\(describe(error))) : saisie libre."
+            targetsError = L("form.targetsUnavailable", describe(error))
         }
         pickDefaultTarget()
     }

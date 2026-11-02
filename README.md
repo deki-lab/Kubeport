@@ -21,6 +21,8 @@ Prérequis : macOS 14 ou plus récent, Mac Apple Silicon.
 
 ## Utilisation
 
+L'interface suit la langue de macOS : français ou anglais (anglais pour les autres langues).
+
 - **Nouveau Forward** : Contexte, namespace, Service ou Pod et ports sont proposés depuis le cluster.
 - Clic droit sur un Forward : **Modifier** (un Forward Actif est relancé) ou **Dupliquer**.
 - **Réglages** (roue dentée) : lancement à l'ouverture de session, kubeconfig forcé.
@@ -41,6 +43,7 @@ cargo run -p kubeport-cli        # CLI de développement
 ./scripts/build-app.sh           # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg
 ./scripts/measure-footprint.sh   # empreinte mémoire de l'app lancée (budget : 35 Mo)
 ./scripts/rollout-test.sh        # bout en bout sur docker-desktop : rollout sans coupure
+python3 scripts/check-l10n.py      # traductions : clés manquantes, inutilisées, placeholders
 ```
 
 Variables utiles pour lancer l'app en développement :

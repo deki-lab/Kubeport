@@ -10,13 +10,13 @@ use kubeport_core::{Config, Manager, Target};
 #[command(
     name = "kubeport",
     version,
-    about = "Port-forwards Kubernetes (CLI de développement)"
+    about = "Kubernetes port-forwards (development CLI)"
 )]
 struct Cli {
-    /// Fichier de config (défaut : ~/Library/Application Support/k8s_forwarder/config.toml)
+    /// Config file (default: ~/Library/Application Support/k8s_forwarder/config.toml)
     #[arg(long, global = true)]
     config: Option<PathBuf>,
-    /// Kubeconfig à utiliser (défaut : KUBECONFIG puis ~/.kube/config)
+    /// Kubeconfig to use (default: KUBECONFIG, then ~/.kube/config)
     #[arg(long, global = true)]
     kubeconfig: Option<PathBuf>,
     #[command(subcommand)]
@@ -25,9 +25,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Liste les Forwards configurés
+    /// List configured Forwards
     List,
-    /// Active des Forwards (tous si aucun nom) et affiche leur État réel jusqu'à Ctrl-C
+    /// Activate Forwards (all when no name is given) and print their state until Ctrl-C
     Up { names: Vec<String> },
 }
 
@@ -86,7 +86,7 @@ async fn up(config: Config, kubeconfig: Option<PathBuf>, names: Vec<String>) -> 
         match manager.activate(name).await {
             Ok(rivals) => {
                 for rival in rivals {
-                    println!("{rival} désactivé (port partagé avec {name})");
+                    println!("{rival} deactivated (local port shared with {name})");
                 }
             }
             Err(e) => {

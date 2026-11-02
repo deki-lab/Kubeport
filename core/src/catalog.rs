@@ -26,7 +26,7 @@ pub async fn namespaces(client: Client) -> Result<Vec<String>, String> {
     let list = Api::<Namespace>::all(client)
         .list(&ListParams::default())
         .await
-        .map_err(|e| format!("namespaces : {e}"))?;
+        .map_err(|e| e.to_string())?;
     let mut names: Vec<String> = list
         .items
         .into_iter()
@@ -41,11 +41,11 @@ pub async fn targets(client: Client, namespace: &str) -> Result<Vec<TargetChoice
     let services = Api::<Service>::namespaced(client.clone(), namespace)
         .list(&ListParams::default())
         .await
-        .map_err(|e| format!("Services : {e}"))?;
+        .map_err(|e| e.to_string())?;
     let pods = Api::<Pod>::namespaced(client, namespace)
         .list(&ListParams::default().fields("status.phase=Running"))
         .await
-        .map_err(|e| format!("Pods : {e}"))?;
+        .map_err(|e| e.to_string())?;
 
     let mut choices: Vec<TargetChoice> = services.items.iter().filter_map(service_choice).collect();
     choices.sort_by(|a, b| target_name(a).cmp(target_name(b)));

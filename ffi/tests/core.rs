@@ -13,7 +13,7 @@ impl CoreListener for Recorder {
     fn forwards_changed(&self, forwards: Vec<ForwardView>) {
         *self.0.lock().unwrap() = forwards;
     }
-    fn notice(&self, _message: String) {}
+    fn notice(&self, _notice: kubeport_ffi::Notice) {}
 }
 
 impl Recorder {
