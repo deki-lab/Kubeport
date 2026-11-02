@@ -2,12 +2,14 @@ import SwiftUI
 
 @main
 struct KubeportApp: App {
+    @State private var model = CoreModel()
+
     var body: some Scene {
-        MenuBarExtra("Kubeport", systemImage: "point.3.connected.trianglepath.dotted") {
-            Text("Aucun Forward")
-            Divider()
-            Button("Quitter") { NSApplication.shared.terminate(nil) }
-                .keyboardShortcut("q")
+        MenuBarExtra {
+            PanelView(model: model)
+        } label: {
+            Image(nsImage: StatusIcon.image(for: model.globalState))
         }
+        .menuBarExtraStyle(.window)
     }
 }

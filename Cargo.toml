@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core", "cli"]
+members = ["core", "cli", "ffi"]
 
 [workspace.package]
 # La version de l'app vit dans version.txt (gérée par release-please).

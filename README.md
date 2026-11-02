@@ -21,14 +21,22 @@ Prérequis : macOS 14 ou plus récent, Mac Apple Silicon.
 
 ## Développement
 
-Prérequis : Rust stable, Swift 6 (Command Line Tools ou Xcode).
+Prérequis : Rust stable, Xcode (pour `xcodebuild -create-xcframework`).
 
 ```sh
 cargo test --all                 # cœur Rust
 cargo run -p kubeport-cli        # CLI de développement
+./scripts/build-ffi.sh           # cœur Rust → app/KubeportFFI.xcframework + bindings Swift
 ./scripts/build-app.sh           # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg
 ./scripts/measure-footprint.sh   # empreinte mémoire de l'app lancée (budget : 35 Mo)
 ./scripts/rollout-test.sh        # bout en bout sur docker-desktop : rollout sans coupure
+```
+
+Variables utiles pour lancer l'app en développement :
+
+```sh
+KUBEPORT_CONFIG=tests/fixtures/config.toml KUBEPORT_ACTIVATE=whoami \
+  dist/Kubeport.app/Contents/MacOS/Kubeport
 ```
 
 ## CLI de développement

@@ -1,0 +1,20 @@
+[package]
+name = "kubeport-ffi"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+# staticlib : lié dans l'app SwiftUI ; cdylib : lu par uniffi-bindgen pour générer le Swift.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+kubeport-core = { path = "../core" }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "sync", "time"] }
+tracing = "0.1.44"
+uniffi = { version = "0.32.2", features = ["cli"] }
