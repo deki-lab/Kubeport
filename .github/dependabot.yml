@@ -4,11 +4,19 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Une seule PR par semaine pour toutes les mises à jour github-actions.
+    groups:
+      github-actions:
+        patterns: ["*"]
     commit-message:
       prefix: ci
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
+    # Une seule PR par semaine pour toutes les mises à jour cargo.
+    groups:
+      cargo:
+        patterns: ["*"]
     commit-message:
       prefix: chore
