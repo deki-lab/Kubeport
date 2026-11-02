@@ -2,14 +2,23 @@ name: CI
 
 on:
   pull_request:
+    # `closed` only cancels the run still in progress (see concurrency); every job skips it.
+    types: [opened, synchronize, reopened, closed]
   push:
     branches: [main]
+
+# One run per PR: a new push, a merge or a close cancels the run in progress.
+# Pushes to main are grouped by commit, so each main commit is still tested.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   rust:
+    if: github.event.action != 'closed'
     # The core is cross-platform: Linux starts fast and costs 10x less than macOS.
     runs-on: ubuntu-latest
     steps:
@@ -25,6 +34,7 @@ jobs:
       - run: cargo test --all
 
   app:
+    if: github.event.action != 'closed'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
