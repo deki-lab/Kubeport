@@ -291,7 +291,8 @@ private struct ForwardDetails: View {
 
 // MARK: - Building blocks
 
-private struct SectionTitle: View {
+/// Grey section title, as in the macOS Wi-Fi menu.
+struct SectionTitle: View {
     let text: String
     var small = false
 
@@ -306,19 +307,20 @@ private struct SectionTitle: View {
     }
 }
 
-private struct InsetDivider: View {
+struct InsetDivider: View {
     var body: some View { Divider().padding(.horizontal, 10).padding(.vertical, 2) }
 }
 
 /// Plain menu-style row (footer), highlighted on hover like a menu item.
-private struct MenuRow: View {
+struct MenuRow: View {
     let title: String
-    let shortcut: KeyEquivalent
+    var shortcut: KeyEquivalent?
+    var role: ButtonRole?
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
+        Button(role: role, action: action) {
             Text(title)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10).padding(.vertical, 6)
@@ -326,7 +328,7 @@ private struct MenuRow: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(hovering ? Color.primary.opacity(0.08) : .clear))
         }
         .buttonStyle(.plain)
-        .keyboardShortcut(shortcut)
+        .keyboardShortcut(shortcut.map { KeyboardShortcut($0) })
         .onHover { hovering = $0 }
     }
 }

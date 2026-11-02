@@ -118,3 +118,6 @@
 "settings.apply" = "Apply";
 "settings.applied" = "Kubeconfig applied";
 "form.deleteQuestion" = "Delete “%1$@”?";
+"settings.general" = "General";
+"form.section.target" = "Target";
+"form.section.local" = "On this Mac";

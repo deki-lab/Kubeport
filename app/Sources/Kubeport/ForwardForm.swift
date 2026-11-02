@@ -37,37 +37,38 @@ struct ForwardForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-        ScreenHeader(title: title, back: close)
-        Divider()
-        VStack(alignment: .leading, spacing: 10) {
+            ScreenHeader(title: title, back: close)
+            InsetDivider()
 
-            Form {
-                Picker(L("form.context"), selection: $context) {
-                    ForEach(contexts, id: \.self) { Text($0).tag($0) }
-                }
-
+            SectionTitle(text: L("form.section.target"))
+            SettingRow(label: L("form.context")) {
+                menuPicker(L("form.context"), selection: $context, values: contexts)
+            }
+            SettingRow(label: L("form.namespace")) {
                 if namespacesError == nil, !namespaces.isEmpty {
-                    Picker(L("form.namespace"), selection: $namespace) {
-                        ForEach(namespaces, id: \.self) { Text($0).tag($0) }
-                    }
+                    menuPicker(L("form.namespace"), selection: $namespace, values: namespaces)
                 } else {
-                    TextField(L("form.namespace"), text: $namespace)
+                    field(L("form.namespace"), text: $namespace)
                 }
-
+            }
+            SettingRow(label: L("form.type")) {
                 Picker(L("form.type"), selection: $kind) {
                     Text(L("form.service")).tag(TargetKind.service)
                     Text(L("form.pod")).tag(TargetKind.pod)
                 }
                 .pickerStyle(.segmented)
-
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+            }
+            SettingRow(label: targetLabel) {
                 if !filteredTargets.isEmpty {
-                    Picker(targetLabel, selection: $targetName) {
-                        ForEach(filteredTargets, id: \.name) { Text($0.name).tag($0.name) }
-                    }
+                    menuPicker(targetLabel, selection: $targetName, values: filteredTargets.map(\.name))
                 } else {
-                    TextField(targetLabel, text: $targetName)
+                    field(targetLabel, text: $targetName)
                 }
-
+            }
+            SettingRow(label: L("form.remotePort")) {
                 if !portOptions.isEmpty {
                     Picker(L("form.remotePort"), selection: $remotePort) {
                         ForEach(portOptions, id: \.port) { port in
@@ -75,14 +76,33 @@ struct ForwardForm: View {
                                 .tag(String(port.port))
                         }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 } else {
-                    TextField(L("form.remotePort"), text: $remotePort)
+                    field(L("form.remotePort"), text: $remotePort, width: 80)
                 }
+            }
+            if let hint = namespacesError ?? targetsError {
+                Hint(text: hint)
+            }
 
-                TextField(L("form.localPort"), text: Binding(
+            InsetDivider().padding(.top, 4)
+            SectionTitle(text: L("form.section.local"))
+            SettingRow(label: L("form.localPort")) {
+                field(L("form.localPort"), text: Binding(
                     get: { localPort },
                     set: { localPort = $0; localEdited = true }
+                ), width: 80)
+            }
+            SettingRow(label: L("form.name")) {
+                field(L("form.name"), text: Binding(
+                    get: { name },
+                    set: { name = $0; nameEdited = true }
                 ))
+            }
+            SettingRow(label: L("form.idleTimeout")) {
                 Picker(L("form.idleTimeout"), selection: $idleTimeout) {
                     Text(L("idle.inherit", idleDefaultLabel(defaultIdle))).tag(IdleTimeoutView.inherit)
                     Text(L("idle.never")).tag(IdleTimeoutView.never)
@@ -90,18 +110,13 @@ struct ForwardForm: View {
                         Text(idleDuration(minutes)).tag(IdleTimeoutView.minutes(minutes: minutes))
                     }
                 }
-                TextField(L("form.name"), text: Binding(
-                    get: { name },
-                    set: { name = $0; nameEdited = true }
-                ))
-            }
-            .formStyle(.columns)
-
-            if let hint = namespacesError ?? targetsError {
-                Text(hint).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
             if let error {
-                Text(error).font(.caption).foregroundStyle(.red).lineLimit(3)
+                Hint(text: error, color: .red)
             }
 
             if case .edit(let forward) = mode, confirmDelete {
@@ -114,12 +129,17 @@ struct ForwardForm: View {
                 }
                 .controlSize(.small)
                 .padding(8)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.08)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.08)))
+                .padding(.horizontal, 6)
+                .padding(.top, 4)
             }
 
+            InsetDivider().padding(.top, 4)
             HStack {
                 if case .edit = mode, !confirmDelete {
                     Button(L("form.delete"), role: .destructive) { confirmDelete = true }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
                 }
                 Spacer()
                 Button(L("form.cancel"), action: close)
@@ -127,15 +147,39 @@ struct ForwardForm: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(saving || !isComplete)
             }
+            .controlSize(.small)
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
         }
-        .padding(12)
-        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 6)
         .task { await start() }
         .onChange(of: context) { _, value in Task { await loadNamespaces(value) } }
         .onChange(of: namespace) { _, value in Task { await loadTargets(context, value) } }
         .onChange(of: kind) { _, _ in pickDefaultTarget() }
         .onChange(of: targetName) { _, _ in pickDefaultPort(); autofill() }
         .onChange(of: remotePort) { _, _ in autofill() }
+    }
+
+    /// Right-aligned menu without a frame, like the Wi-Fi menu controls.
+    private func menuPicker(_ label: String, selection: Binding<String>, values: [String]) -> some View {
+        Picker(label, selection: selection) {
+            ForEach(values, id: \.self) { Text($0).tag($0) }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func field(_ label: String, text: Binding<String>, width: CGFloat = 150) -> some View {
+        TextField(label, text: text)
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            .multilineTextAlignment(.trailing)
+            .frame(width: width)
+            .labelsHidden()
     }
 
     private var title: String {

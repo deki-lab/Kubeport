@@ -1,23 +1,61 @@
 import SwiftUI
 
-/// Header shared by the form and the settings: "‹ Forwards" back button and a title.
+/// Header shared by the form and the settings, in the style of the main panel header:
+/// a back chevron and a bold title.
 struct ScreenHeader: View {
     let title: String
     let back: () -> Void
 
     var body: some View {
-        HStack {
+        HStack(spacing: 6) {
             Button(action: back) {
-                Label(L("header.back"), systemImage: "chevron.left")
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(.secondary)
             .keyboardShortcut(.cancelAction)
+            .help(L("header.back"))
+            .accessibilityLabel(L("header.back"))
+            Text(title).font(.system(size: 15, weight: .bold))
             Spacer()
-            Text(title).font(.headline)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 6)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+    }
+}
+
+/// One line: label on the left, control on the right (like the Wi-Fi menu switches).
+struct SettingRow<Control: View>: View {
+    let label: String
+    @ViewBuilder let control: Control
+
+    var body: some View {
+        HStack {
+            Text(label)
+            Spacer(minLength: 8)
+            control
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+    }
+}
+
+/// Grey explanatory line under a row.
+struct Hint: View {
+    let text: String
+    var color: Color = .secondary
+
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 4)
     }
 }
 
@@ -34,69 +72,74 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScreenHeader(title: L("settings.title"), back: close)
-            Divider()
-            VStack(alignment: .leading, spacing: 12) {
+            InsetDivider()
+
+            SectionTitle(text: L("settings.general"))
+            SettingRow(label: L("settings.launchAtLogin")) {
                 Toggle(L("settings.launchAtLogin"), isOn: Binding(
                     get: { launchAtLogin },
                     set: { model.setLaunchAtLogin($0); launchAtLogin = model.launchAtLogin }
                 ))
                 .toggleStyle(.switch)
-                if model.launchAtLoginNeedsApproval {
-                    Text(L("settings.needsApproval")).font(.caption).foregroundStyle(.secondary)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Picker(L("settings.idleTimeout"), selection: Binding(
-                        get: { defaultIdle },
-                        set: { value in
-                            defaultIdle = value
-                            Task {
-                                do { try await model.setDefaultIdleTimeout(value) } catch { self.error = describe(error) }
-                            }
-                        }
-                    )) {
-                        Text(L("idle.never")).tag(UInt32?.none)
-                        ForEach(idleChoices, id: \.self) { minutes in
-                            Text(idleDuration(minutes)).tag(UInt32?.some(minutes))
-                        }
-                    }
-                    Text(L("settings.idleTimeoutHint")).font(.caption).foregroundStyle(.secondary)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L("settings.kubeconfig"))
-                    HStack {
-                        TextField(L("settings.kubeconfigPlaceholder"), text: $kubeconfig)
-                            .textFieldStyle(.roundedBorder)
-                        Button(L("settings.choose"), action: choose)
-                    }
-                    Text(L("settings.kubeconfigHint")).font(.caption).foregroundStyle(.secondary)
-                    Button(L("settings.apply"), action: apply).controlSize(.small)
-                }
-
-                if let error {
-                    Text(error).font(.caption).foregroundStyle(.red)
-                }
-
-                HStack {
-                    Button(L("footer.openConfig"), action: model.openConfig)
-                    Button(L("footer.reload"), action: model.reload).keyboardShortcut("r")
-                }
                 .controlSize(.small)
+                .labelsHidden()
             }
-            .padding(12)
-            Divider()
-            HStack {
-                Text("Kubeport " + model.version).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button(L("footer.quit"), action: model.quit).keyboardShortcut("q")
+            if model.launchAtLoginNeedsApproval {
+                Hint(text: L("settings.needsApproval"))
+            }
+            SettingRow(label: L("settings.idleTimeout")) {
+                Picker(L("settings.idleTimeout"), selection: Binding(
+                    get: { defaultIdle },
+                    set: { value in
+                        defaultIdle = value
+                        Task {
+                            do { try await model.setDefaultIdleTimeout(value) } catch { self.error = describe(error) }
+                        }
+                    }
+                )) {
+                    Text(L("idle.never")).tag(UInt32?.none)
+                    ForEach(idleChoices, id: \.self) { minutes in
+                        Text(idleDuration(minutes)).tag(UInt32?.some(minutes))
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+            Hint(text: L("settings.idleTimeoutHint"))
+
+            InsetDivider().padding(.top, 4)
+            SectionTitle(text: L("settings.kubeconfig"))
+            HStack(spacing: 6) {
+                TextField(L("settings.kubeconfigPlaceholder"), text: $kubeconfig)
+                    .textFieldStyle(.roundedBorder)
+                Button(L("settings.choose"), action: choose)
+                Button(L("settings.apply"), action: apply)
             }
             .controlSize(.small)
-            // Keep clear of the panel's rounded bottom corners.
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            Hint(text: L("settings.kubeconfigHint"))
+            if let error {
+                Hint(text: error, color: .red)
+            }
+
+            InsetDivider().padding(.top, 4)
+            MenuRow(title: L("footer.openConfig"), action: model.openConfig)
+            MenuRow(title: L("footer.reload"), shortcut: "r", action: model.reload)
+
+            InsetDivider()
+            MenuRow(title: L("footer.quit"), shortcut: "q", action: model.quit)
+            Text("Kubeport " + model.version)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 10)
+                .padding(.top, 2)
+                .padding(.bottom, 4)
         }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 6)
         .task {
             launchAtLogin = model.launchAtLogin
             kubeconfig = (try? await model.kubeconfig()) ?? nil ?? ""
