@@ -11,6 +11,7 @@ enum Screen: Equatable {
 struct PanelView: View {
     let model: CoreModel
     @State private var screen: Screen = .list
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,8 +28,21 @@ struct PanelView: View {
             }
         }
         .frame(width: 320)
-        .background(WindowTopAnchor())
+        // Ideal height only, measured, then the window is resized to it (it never shrinks
+        // by itself) and the content stays pinned to the top, under the menu bar.
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { proxy in
+            Color.clear.preference(key: PanelHeightKey.self, value: proxy.size.height)
+        })
+        .onPreferenceChange(PanelHeightKey.self) { contentHeight = $0 }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(WindowTopAnchor(contentHeight: contentHeight))
     }
+}
+
+private struct PanelHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 // MARK: - List
