@@ -36,6 +36,10 @@ _Avoid_: enabled, on/off, statut
 Ce qui se passe effectivement pour un Forward Actif : **Connecté**, **Reconnexion** ou **Erreur**. Un Forward Actif peut ne pas être Connecté.
 _Avoid_: statut, santé
 
+**Connecté**:
+État réel d'un Forward Actif dont le port local écoute et qui a un Pod résolu.
+_Avoid_: up, en ligne
+
 **Reconnexion**:
 État réel d'un Forward Actif qui a perdu son Pod résolu, son tunnel ou le réseau, et réessaie seul tant qu'il reste Actif.
 _Avoid_: retry, failover

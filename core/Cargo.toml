@@ -7,3 +7,14 @@ publish.workspace = true
 [lib]
 # staticlib : lié dans l'app SwiftUI via UniFFI (tranche 2).
 crate-type = ["lib", "staticlib"]
+
+[dependencies]
+kube = { version = "5.0.0", default-features = false, features = ["client", "runtime", "ws", "rustls-tls", "ring"] }
+k8s-openapi = { version = "0.29.0", default-features = false, features = ["std", "earliest"] }
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "net", "io-util", "sync", "time", "macros"] }
+tokio-util = { version = "0.7.20", default-features = false }
+futures = { version = "0.3.34", default-features = false, features = ["std"] }
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.8"
+thiserror = "2.0.21"
+tracing = "0.1.44"

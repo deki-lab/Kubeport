@@ -28,7 +28,17 @@ cargo test --all                 # cœur Rust
 cargo run -p kubeport-cli        # CLI de développement
 ./scripts/build-app.sh           # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg
 ./scripts/measure-footprint.sh   # empreinte mémoire de l'app lancée (budget : 35 Mo)
+./scripts/rollout-test.sh        # bout en bout sur docker-desktop : rollout sans coupure
 ```
+
+## CLI de développement
+
+```sh
+cargo run -p kubeport-cli -- --config tests/fixtures/config.toml list
+cargo run -p kubeport-cli -- --config tests/fixtures/config.toml up whoami
+```
+
+Format de la config : voir `core/src/config.rs`.
 
 ## Releases
 

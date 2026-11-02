@@ -9,4 +9,7 @@ name = "kubeport"
 path = "src/main.rs"
 
 [dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
 kubeport-core = { path = "../core" }
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "macros", "signal"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

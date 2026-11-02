@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   rust:
-    runs-on: macos-15
+    # Le cœur est multiplateforme : Linux démarre vite et coûte 10x moins que macOS.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

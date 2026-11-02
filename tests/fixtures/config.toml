@@ -1,0 +1,31 @@
+[[forward]]
+name = "whoami"
+context = "docker-desktop"
+namespace = "kubeport-it"
+service = "whoami"
+remote_port = 8080
+local_port = 18080
+
+[[forward]]
+name = "whoami-rival"
+context = "docker-desktop"
+namespace = "kubeport-it"
+service = "whoami"
+remote_port = 8080
+local_port = 18080
+
+[[forward]]
+name = "external"
+context = "docker-desktop"
+namespace = "kubeport-it"
+service = "external"
+remote_port = 80
+local_port = 18081
+
+[[forward]]
+name = "absent"
+context = "docker-desktop"
+namespace = "kubeport-it"
+service = "nexistepas"
+remote_port = 80
+local_port = 18082
