@@ -12,8 +12,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, watch};
 
+use crate::cluster::Connector;
+use crate::cluster::kube::{KubeConnector, KubeEnv};
 use crate::config::{Config, ConfigError, Forward, minutes, write_atomic};
-use crate::manager::{KubeEnv, Manager, ManagerError, Statuses};
+use crate::manager::{Manager, ManagerError, Statuses};
 use crate::state::Reason;
 
 /// Short message for the user, produced by a Session operation.
@@ -46,8 +48,8 @@ struct SavedState {
     remembered: Vec<String>,
 }
 
-pub struct Session {
-    manager: Manager,
+pub struct Session<C: Connector = KubeConnector> {
+    manager: Manager<C>,
     config_path: PathBuf,
     /// `None`: nothing is read from or written to `state.toml` (development CLI).
     state_path: Option<PathBuf>,
@@ -60,8 +62,19 @@ impl Session {
     /// Builds a Session on an already loaded config (see `Config::load_or_create`).
     /// Nothing is activated until `restore`.
     pub fn new(config: Config, config_path: PathBuf, env: KubeEnv) -> Self {
+        Self::with_connector(config, config_path, KubeConnector::new(env))
+    }
+
+    /// Cached kube-rs client for the Context; for the form's one-off listings.
+    pub async fn client(&mut self, context: &str) -> Result<kube::Client, Reason> {
+        self.manager.client(context).await
+    }
+}
+
+impl<C: Connector> Session<C> {
+    pub fn with_connector(config: Config, config_path: PathBuf, connector: C) -> Self {
         let state_path = Some(config_path.with_file_name("state.toml"));
-        let mut manager = Manager::new(config, env);
+        let mut manager = Manager::with_connector(config, connector);
         let expired = manager.take_expired().expect("fresh Manager");
         Self {
             manager,
@@ -239,10 +252,6 @@ impl Session {
 
     pub fn contexts(&self) -> Result<Vec<String>, Reason> {
         self.manager.contexts()
-    }
-
-    pub async fn client(&mut self, context: &str) -> Result<kube::Client, Reason> {
-        self.manager.client(context).await
     }
 
     // MARK: Internals

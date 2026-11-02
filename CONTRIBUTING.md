@@ -3,7 +3,8 @@
 ## Project layout
 
 ```text
-core/   Rust core (kube-rs): config, Resolved pod, port-forwarding, Idle timeout
+core/   Rust core: Session, Manager, Forward runtime, config; cluster/ is the seam to
+        Kubernetes (kube-rs adapter, in-memory adapter for tests)
 ffi/    UniFFI bridge exposing the core to Swift
 cli/    Development CLI to drive the core without the UI
 app/    SwiftUI menu bar app (Swift package) and its translations
