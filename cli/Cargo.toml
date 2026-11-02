@@ -1,0 +1,12 @@
+[package]
+name = "kubeport-cli"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "kubeport"
+path = "src/main.rs"
+
+[dependencies]
+kubeport-core = { path = "../core" }

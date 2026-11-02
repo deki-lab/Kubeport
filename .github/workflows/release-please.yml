@@ -1,0 +1,67 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+      version: ${{ steps.rp.outputs.version }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-dmg:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: macos-15
+    outputs:
+      sha256: ${{ steps.dmg.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - id: dmg
+        run: |
+          DMG="$(./scripts/build-app.sh | tail -1)"
+          echo "sha256=$(shasum -a 256 "$DMG" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          gh release upload "${{ needs.release-please.outputs.tag_name }}" "$DMG" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  homebrew-tap:
+    needs: [release-please, build-dmg]
+    # Activé quand le dépôt est public : variable de dépôt HOMEBREW_TAP_ENABLED=true
+    # et secret HOMEBREW_TAP_TOKEN (PAT fine-grained, contents:write sur lideke/homebrew-tap).
+    if: vars.HOMEBREW_TAP_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: lideke/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - run: |
+          mkdir -p tap/Casks
+          sed -e "s/__VERSION__/${{ needs.release-please.outputs.version }}/" \
+              -e "s/__SHA256__/${{ needs.build-dmg.outputs.sha256 }}/" \
+              packaging/kubeport.rb.tmpl > tap/Casks/kubeport.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/kubeport.rb
+          git commit -m "kubeport ${{ needs.release-please.outputs.version }}"
+          git push

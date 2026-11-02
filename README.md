@@ -1,0 +1,35 @@
+# Kubeport
+
+Port-forwards Kubernetes depuis la barre de menu macOS. On configure un Forward une fois, on l'active d'un clic, et il suit automatiquement les pods derrière un Service (rollouts compris).
+
+- Vocabulaire : [GLOSSARY.md](GLOSSARY.md)
+- Décisions d'architecture : [docs/adr/](docs/adr/)
+
+## Installation
+
+```sh
+brew install --cask lideke/tap/kubeport
+```
+
+L'app n'est pas encore signée par un Developer ID Apple ni notarisée. Au premier lancement, macOS la bloque :
+
+1. Lancer Kubeport une première fois, puis fermer l'alerte.
+2. Ouvrir **Réglages Système > Confidentialité et sécurité**.
+3. En bas, cliquer **Ouvrir quand même** en face de Kubeport, puis confirmer.
+
+Prérequis : macOS 14 ou plus récent, Mac Apple Silicon.
+
+## Développement
+
+Prérequis : Rust stable, Swift 6 (Command Line Tools ou Xcode).
+
+```sh
+cargo test --all                 # cœur Rust
+cargo run -p kubeport-cli        # CLI de développement
+./scripts/build-app.sh           # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg
+./scripts/measure-footprint.sh   # empreinte mémoire de l'app lancée (budget : 35 Mo)
+```
+
+## Releases
+
+Les versions sont gérées par [release-please](https://github.com/googleapis/release-please) : merge en squash uniquement, titres de PR au format [Conventional Commits](https://www.conventionalcommits.org/) (`feat: …`, `fix: …`). Merger la PR de release crée le tag, construit le `.dmg`, l'attache à la release, et met à jour le cask du tap quand `HOMEBREW_TAP_ENABLED` vaut `true`.

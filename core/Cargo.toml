@@ -1,0 +1,9 @@
+[package]
+name = "kubeport-core"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+# staticlib : lié dans l'app SwiftUI via UniFFI (tranche 2).
+crate-type = ["lib", "staticlib"]
