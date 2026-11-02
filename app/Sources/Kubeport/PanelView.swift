@@ -27,6 +27,7 @@ struct PanelView: View {
             }
         }
         .frame(width: 320)
+        .background(WindowTopAnchor())
     }
 }
 
