@@ -36,6 +36,9 @@ pub struct Forward {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
+    /// Réglage : kubeconfig forcé. Absent : celui du shell de login, puis `~/.kube/config`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kubeconfig: Option<PathBuf>,
     #[serde(default, rename = "forward")]
     pub forwards: Vec<Forward>,
 }

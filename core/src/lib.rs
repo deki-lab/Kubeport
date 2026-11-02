@@ -6,8 +6,10 @@ pub mod config;
 mod forward;
 pub mod manager;
 pub mod resolve;
+pub mod shell_env;
 pub mod state;
 
 pub use config::{Config, Forward, Target};
-pub use manager::{Manager, ManagerError, Statuses};
+pub use manager::{KubeEnv, Manager, ManagerError, Statuses};
+pub use shell_env::{ShellEnv, login_shell_env};
 pub use state::{ForwardStatus, RealState};

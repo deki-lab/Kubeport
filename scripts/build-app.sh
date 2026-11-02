@@ -12,7 +12,7 @@ DMG="$DIST/Kubeport-$VERSION-arm64.dmg"
 rm -rf "$DIST"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cargo build --release --manifest-path "$ROOT/Cargo.toml"
+"$ROOT/scripts/build-ffi.sh" >/dev/null
 swift build -c release --arch arm64 --package-path "$ROOT/app"
 BIN_DIR="$(swift build -c release --arch arm64 --package-path "$ROOT/app" --show-bin-path)"
 

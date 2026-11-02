@@ -75,7 +75,11 @@ async fn up(config: Config, kubeconfig: Option<PathBuf>, names: Vec<String>) -> 
     } else {
         names
     };
-    let mut manager = Manager::new(config, kubeconfig);
+    let env = kubeport_core::KubeEnv {
+        kubeconfig: kubeconfig.into_iter().collect(),
+        exec_path: None,
+    };
+    let mut manager = Manager::new(config, env);
     let mut statuses = manager.subscribe();
 
     for name in &names {
