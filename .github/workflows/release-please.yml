@@ -25,7 +25,9 @@ jobs:
   build-dmg:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
-    runs-on: macos-15
+    # Runners auto-hébergés (Mac du mainteneur) tant que le dépôt est privé : GitHub annule
+    # les jobs macos-15 arm64 faute de capacité. Revenir à `macos-15` avant le passage en public.
+    runs-on: [self-hosted, macOS, ARM64, kubeport]
     outputs:
       sha256: ${{ steps.dmg.outputs.sha256 }}
     steps:
@@ -34,6 +36,8 @@ jobs:
           ref: ${{ needs.release-please.outputs.tag_name }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        # Sur le Mac du mainteneur, on garde son rustup tel quel.
+        if: runner.environment == 'github-hosted'
         with:
           toolchain: stable
       - id: dmg
