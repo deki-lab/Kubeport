@@ -10,9 +10,10 @@ permissions: {}
 
 jobs:
   # Writes with a token of the deki-lab-release-please GitHub App (Contents, Pull requests
-  # and Issues: read and write; installed on Kubeport only): repo variable
-  # RELEASE_PLEASE_CLIENT_ID, repo secret RELEASE_PLEASE_APP_KEY. A PR opened with the
-  # GITHUB_TOKEN starts no workflow, so the release PR would have no checks.
+  # and Issues: read and write), shared by the deki-lab repos that use release-please:
+  # org variable RELEASE_PLEASE_CLIENT_ID, org secret RELEASE_PLEASE_APP_KEY. The token
+  # covers this repository only. A PR opened with the GITHUB_TOKEN starts no workflow,
+  # so the release PR would have no checks.
   release-please:
     runs-on: ubuntu-latest
     permissions: {}
