@@ -6,9 +6,9 @@ import UserNotifications
 
 /// Overall state shown by the menu bar icon.
 enum GlobalState {
-    case idle    // no Active Forward
+    case idle  // no Active Forward
     case active  // at least one Active Forward, none in Error
-    case error   // at least one Active Forward in Error
+    case error  // at least one Active Forward in Error
 }
 
 /// Facade of the Rust core for SwiftUI. Every mutation goes through the main thread.
@@ -122,7 +122,8 @@ final class CoreModel {
 
     /// Config file path, known even when the core could not start.
     var configPath: String {
-        core?.configPath() ?? Self.configOverride ?? FileManager.default.homeDirectoryForCurrentUser
+        core?.configPath() ?? Self.configOverride
+            ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Kubeport/config.toml").path
     }
 
@@ -230,7 +231,8 @@ final class CoreModel {
             Task { @MainActor in self?.core?.reconnectAll() }
         }
         pathMonitor.pathUpdateHandler = { [weak self] path in
-            let signature = path.status == .satisfied
+            let signature =
+                path.status == .satisfied
                 ? path.availableInterfaces.map(\.name).joined(separator: ",")
                 : "offline"
             Task { @MainActor in self?.networkChanged(signature) }

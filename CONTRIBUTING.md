@@ -22,12 +22,13 @@ cargo test --all                          # Rust core and FFI bridge
 ./scripts/build-app.sh                    # dist/Kubeport.app + dist/Kubeport-<version>.dmg (arm64 + x86_64)
 swift test --package-path app             # app logic without SwiftUI (after build-app.sh)
 python3 scripts/check-l10n.py             # translations: missing or unused keys, placeholders
+git ls-files -z 'app/*.swift' | xargs -0 swift format -i   # Swift style (.swift-format); CI runs `lint --strict`
 ./scripts/measure-footprint.sh            # memory of the running app (budget: 35 MB)
 ```
 
 `build-app.sh` runs `scripts/build-ffi.sh`, which builds the Rust core into `app/KubeportFFI.xcframework` and generates the Swift bindings. Run alone, `build-ffi.sh` builds for this Mac's architecture only: set `ARCHS="arm64 x86_64"` for both. Open `app/Package.swift` in Xcode to work on the UI.
 
-PR checks run the Rust code only (Linux). The app is built and tested on macOS (Apple silicon and Intel) only on the release PR, after a maintainer approves the `release-build` environment: when you change `app/`, `ffi/` or `scripts/`, run `./scripts/build-app.sh` and `swift test --package-path app` before opening the PR.
+PR checks run the Rust code and swift-format only (Linux). The app is built and tested on macOS (Apple silicon and Intel) only on the release PR, after a maintainer approves the `release-build` environment: when you change `app/`, `ffi/` or `scripts/`, run `./scripts/build-app.sh` and `swift test --package-path app` before opening the PR.
 
 ### Tests against a cluster
 

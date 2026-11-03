@@ -3,6 +3,8 @@ import Foundation
 /// Text translated into the machine's language (`app/Resources/<language>.lproj/Localizable.strings`).
 /// Keys are checked by `scripts/check-l10n.py`: a missing key fails the build.
 /// Arguments replace `%1$@`, `%2$@`…: always pass `String`s.
+// swift-format-ignore: AlwaysUseLowerCamelCase
+// One letter on purpose: it wraps every string shown to the user.
 func L(_ key: String, _ args: String...) -> String {
     let format = Bundle.main.localizedString(forKey: key, value: nil, table: nil)
     return args.isEmpty ? format : String(format: format, arguments: args)

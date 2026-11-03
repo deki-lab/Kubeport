@@ -31,9 +31,11 @@ struct PanelView: View {
         // Ideal height only, measured, then the window is resized to it (it never shrinks
         // by itself) and the content stays pinned to the top, under the menu bar.
         .fixedSize(horizontal: false, vertical: true)
-        .background(GeometryReader { proxy in
-            Color.clear.preference(key: PanelHeightKey.self, value: proxy.size.height)
-        })
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: PanelHeightKey.self, value: proxy.size.height)
+            }
+        )
         .onPreferenceChange(PanelHeightKey.self) { contentHeight = $0 }
         .frame(maxHeight: .infinity, alignment: .top)
         .background(WindowTopAnchor(contentHeight: contentHeight))
@@ -183,10 +185,13 @@ private struct ForwardRow: View {
                 Text(":" + String(forward.localPort))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
-                Toggle(L("row.switch", forward.name), isOn: Binding(
-                    get: { forward.active },
-                    set: { model.setActive(forward, $0) }
-                ))
+                Toggle(
+                    L("row.switch", forward.name),
+                    isOn: Binding(
+                        get: { forward.active },
+                        set: { model.setActive(forward, $0) }
+                    )
+                )
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .labelsHidden()
@@ -365,9 +370,10 @@ private struct CappedScroll<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            content.background(GeometryReader { proxy in
-                Color.clear.preference(key: HeightKey.self, value: proxy.size.height)
-            })
+            content.background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: HeightKey.self, value: proxy.size.height)
+                })
         }
         .scrollIndicators(contentHeight > maxHeight ? .visible : .hidden)
         .frame(height: min(max(contentHeight, 1), maxHeight))

@@ -81,8 +81,8 @@ struct FormState: Equatable {
     var input: ForwardInput? {
         let text = [name, context, namespace, targetName]
         guard text.allSatisfy({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
-              let remote = UInt16(remotePort), remote != 0,
-              let local = UInt16(localPort), local != 0
+            let remote = UInt16(remotePort), remote != 0,
+            let local = UInt16(localPort), local != 0
         else { return nil }
         return ForwardInput(
             name: name, context: context, namespace: namespace, targetKind: kind,

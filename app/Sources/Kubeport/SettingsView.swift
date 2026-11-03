@@ -76,10 +76,16 @@ struct SettingsView: View {
 
             SectionTitle(text: L("settings.general"))
             SettingRow(label: L("settings.launchAtLogin")) {
-                Toggle(L("settings.launchAtLogin"), isOn: Binding(
-                    get: { launchAtLogin },
-                    set: { model.setLaunchAtLogin($0); launchAtLogin = model.launchAtLogin }
-                ))
+                Toggle(
+                    L("settings.launchAtLogin"),
+                    isOn: Binding(
+                        get: { launchAtLogin },
+                        set: {
+                            model.setLaunchAtLogin($0)
+                            launchAtLogin = model.launchAtLogin
+                        }
+                    )
+                )
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .labelsHidden()
@@ -88,15 +94,20 @@ struct SettingsView: View {
                 Hint(text: L("settings.needsApproval"))
             }
             SettingRow(label: L("settings.idleTimeout")) {
-                Picker(L("settings.idleTimeout"), selection: Binding(
-                    get: { defaultIdle },
-                    set: { value in
-                        defaultIdle = value
-                        Task {
-                            do { try await model.setDefaultIdleTimeout(value) } catch { self.error = describe(error) }
+                Picker(
+                    L("settings.idleTimeout"),
+                    selection: Binding(
+                        get: { defaultIdle },
+                        set: { value in
+                            defaultIdle = value
+                            Task {
+                                do { try await model.setDefaultIdleTimeout(value) } catch {
+                                    self.error = describe(error)
+                                }
+                            }
                         }
-                    }
-                )) {
+                    )
+                ) {
                     Text(L("idle.never")).tag(UInt32?.none)
                     ForEach(idleChoices(including: defaultIdle), id: \.self) { minutes in
                         Text(idleDuration(minutes)).tag(UInt32?.some(minutes))
