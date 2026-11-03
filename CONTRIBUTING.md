@@ -27,6 +27,8 @@ python3 scripts/check-l10n.py             # translations: missing or unused keys
 
 `build-app.sh` runs `scripts/build-ffi.sh`, which builds the Rust core into `app/KubeportFFI.xcframework` and generates the Swift bindings. Run alone, `build-ffi.sh` builds for this Mac's architecture only: set `ARCHS="arm64 x86_64"` for both. Open `app/Package.swift` in Xcode to work on the UI.
 
+PR checks run the Rust code only (Linux). The app is built and tested on macOS (Apple silicon and Intel) only on the release PR, after a maintainer approves the `release-build` environment: when you change `app/`, `ffi/` or `scripts/`, run `./scripts/build-app.sh` and `swift test --package-path app` before opening the PR.
+
 ### Tests against a cluster
 
 Some tests need a local cluster (Docker Desktop Kubernetes, context `docker-desktop`):
