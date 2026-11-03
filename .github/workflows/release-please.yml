@@ -74,7 +74,7 @@ jobs:
           SHA256: ${{ needs.build-dmg.outputs.sha256 }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid tag: $TAG" >&2; exit 1; }
-          [[ "$DMG" =~ ^Kubeport-[0-9]+\.[0-9]+\.[0-9]+-arm64\.dmg$ ]] || { echo "invalid name: $DMG" >&2; exit 1; }
+          [[ "$DMG" =~ ^Kubeport-[0-9]+\.[0-9]+\.[0-9]+\.dmg$ ]] || { echo "invalid name: $DMG" >&2; exit 1; }
           echo "$SHA256  dmg/$DMG" | sha256sum --check --strict
           gh release upload "$TAG" "dmg/$DMG" --clobber --repo "$GITHUB_REPOSITORY"
 
