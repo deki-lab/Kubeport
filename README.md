@@ -12,6 +12,12 @@ Kubernetes port-forwards from the macOS menu bar.
 
 Set up a Forward once, turn it on with a switch, and forget about it: Kubeport follows the pods behind a Service, so a rollout or a crashed pod no longer breaks your `localhost` connection.
 
+<p align="center">
+  <img src="docs/images/panel.png" width="314" alt="The Kubeport panel in the menu bar: one Active Forward and the master switch">
+  &nbsp;
+  <img src="docs/images/new-forward.png" width="315" alt="The New Forward form: Context, namespace, Service or Pod, ports and auto-deactivate">
+</p>
+
 ## Features
 
 - **Lives in the menu bar**, in the style of the macOS Wi-Fi menu. No Dock icon, no window to manage.
