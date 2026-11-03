@@ -8,7 +8,7 @@ func L(_ key: String, _ args: String...) -> String {
     return args.isEmpty ? format : String(format: format, arguments: args)
 }
 
-extension ReasonView {
+extension Reason {
     var text: String {
         switch self {
         case .connectingToCluster: L("reason.connectingToCluster")
@@ -45,7 +45,7 @@ extension Notice {
     }
 }
 
-extension FormField {
+extension Field {
     var text: String {
         switch self {
         case .name: L("form.name")

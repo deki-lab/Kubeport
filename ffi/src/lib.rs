@@ -26,17 +26,20 @@ pub enum TargetKind {
     Pod,
 }
 
+// The core's own types, exported as they are: UniFFI checks each variant list below
+// against the core type at compile time, and no conversion code is needed.
+
 /// Actual state of an Active Forward.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum RealStateView {
+#[uniffi::remote(Enum)]
+pub enum RealState {
     Connected { pod: String },
-    Reconnecting { reason: ReasonView },
-    Error { reason: ReasonView },
+    Reconnecting(Reason),
+    Error(Reason),
 }
 
 /// Cause of a Reconnecting or Error state, translated on the Swift side.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum ReasonView {
+#[uniffi::remote(Enum)]
+pub enum Reason {
     ConnectingToCluster,
     SearchingPod,
     NoReadyPod,
@@ -57,42 +60,9 @@ pub enum ReasonView {
     Kubeconfig { detail: String },
 }
 
-impl From<Reason> for ReasonView {
-    fn from(reason: Reason) -> Self {
-        match reason {
-            Reason::ConnectingToCluster => Self::ConnectingToCluster,
-            Reason::SearchingPod => Self::SearchingPod,
-            Reason::NoReadyPod => Self::NoReadyPod,
-            Reason::PodNotReady { pod } => Self::PodNotReady { pod },
-            Reason::ApiUnreachable { detail } => Self::ApiUnreachable { detail },
-            Reason::ApiError { code, detail } => Self::ApiError { code, detail },
-            Reason::PortInUse { port } => Self::PortInUse { port },
-            Reason::PortUnavailable { port, detail } => Self::PortUnavailable { port, detail },
-            Reason::AuthFailed { detail } => Self::AuthFailed { detail },
-            Reason::AccessDenied { detail } => Self::AccessDenied { detail },
-            Reason::NotFound { detail } => Self::NotFound { detail },
-            Reason::ServiceNotFound { namespace, service } => {
-                Self::ServiceNotFound { namespace, service }
-            }
-            Reason::ExternalNameService => Self::ExternalNameService,
-            Reason::ServiceWithoutSelector => Self::ServiceWithoutSelector,
-            Reason::PortNotExposed { port } => Self::PortNotExposed { port },
-            Reason::InvalidTargetPort { value } => Self::InvalidTargetPort { value },
-            Reason::ContextMissing { context } => Self::ContextMissing { context },
-            Reason::Kubeconfig { detail } => Self::Kubeconfig { detail },
-        }
-    }
-}
-
-impl std::fmt::Display for ReasonView {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
 /// Required field missing from the form.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum FormField {
+#[uniffi::remote(Enum)]
+pub enum Field {
     Name,
     Context,
     Namespace,
@@ -181,7 +151,7 @@ pub struct ForwardView {
     /// Desired state.
     pub active: bool,
     /// Actual state, present only if the Forward is Active.
-    pub state: Option<RealStateView>,
+    pub state: Option<RealState>,
     /// Idle timeout chosen for this Forward.
     pub idle_timeout: IdleTimeoutView,
     /// Automatic deactivation deadline, in Unix seconds; absent if a connection
@@ -221,13 +191,13 @@ pub enum CoreError {
     #[error("a Forward named {name:?} already exists")]
     DuplicateName { name: String },
     #[error("{field:?} is missing")]
-    MissingField { field: FormField },
+    MissingField { field: Field },
     #[error("port 0 is not allowed")]
     PortZero,
     #[error("config file: {detail}")]
     ConfigFile { detail: String },
     #[error("{reason}")]
-    Cluster { reason: ReasonView },
+    Cluster { reason: Reason },
     #[error("cluster listing failed: {detail}")]
     ClusterList { detail: String },
     #[error("core stopped")]
@@ -391,14 +361,7 @@ impl Core {
 fn config_error(e: ConfigError) -> CoreError {
     match e {
         ConfigError::DuplicateName(name) => CoreError::DuplicateName { name },
-        ConfigError::MissingField(field) => CoreError::MissingField {
-            field: match field {
-                Field::Name => FormField::Name,
-                Field::Context => FormField::Context,
-                Field::Namespace => FormField::Namespace,
-                Field::Target => FormField::Target,
-            },
-        },
+        ConfigError::MissingField(field) => CoreError::MissingField { field },
         ConfigError::PortZero => CoreError::PortZero,
         other => CoreError::ConfigFile {
             detail: other.to_string(),
@@ -565,9 +528,7 @@ fn forward(input: ForwardInput) -> Forward {
 }
 
 fn cluster_error(reason: Reason) -> CoreError {
-    CoreError::Cluster {
-        reason: reason.into(),
-    }
+    CoreError::Cluster { reason }
 }
 
 fn list_error(detail: String) -> CoreError {
@@ -619,15 +580,7 @@ fn views(session: &Session, statuses: &Statuses) -> Vec<ForwardView> {
                         .and_then(|d| i64::try_from(d.as_secs()).ok())
                 }),
                 active: status.active,
-                state: status.real.map(|r| match r {
-                    RealState::Connected { pod } => RealStateView::Connected { pod },
-                    RealState::Reconnecting(reason) => RealStateView::Reconnecting {
-                        reason: reason.into(),
-                    },
-                    RealState::Error(reason) => RealStateView::Error {
-                        reason: reason.into(),
-                    },
-                }),
+                state: status.real,
             }
         })
         .collect()
