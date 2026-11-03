@@ -21,16 +21,25 @@ case "$PROFILE" in
   dev) OUT=debug ;;
   *) echo "unknown profile: $PROFILE" >&2; exit 1 ;;
 esac
+HOST="$(uname -m)"
+ARCHS="${ARCHS:-$HOST}"
 LIBS=()
-for arch in ${ARCHS:-$(uname -m)}; do
+for arch in $ARCHS; do
   case "$arch" in
     arm64) triple=aarch64-apple-darwin ;;
     x86_64) triple=x86_64-apple-darwin ;;
     *) echo "unknown arch: $arch" >&2; exit 1 ;;
   esac
-  rustup target add "$triple" >/dev/null
-  cargo build --profile "$PROFILE" --locked -p kubeport-ffi --target "$triple"
-  LIBS+=("target/$triple/$OUT/libkubeport_ffi.a")
+  if [ "$ARCHS" = "$HOST" ]; then
+    # This Mac's architecture only: no --target, so the build reuses target/<profile>
+    # (what cargo test or the bindgen build compiled) instead of rebuilding everything.
+    cargo build --profile "$PROFILE" --locked -p kubeport-ffi
+    LIBS+=("target/$OUT/libkubeport_ffi.a")
+  else
+    rustup target add "$triple" >/dev/null
+    cargo build --profile "$PROFILE" --locked -p kubeport-ffi --target "$triple"
+    LIBS+=("target/$triple/$OUT/libkubeport_ffi.a")
+  fi
 done
 
 rm -rf "$GEN" "$XCF" "$SWIFT_OUT"
