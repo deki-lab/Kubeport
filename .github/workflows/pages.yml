@@ -1,0 +1,52 @@
+name: Pages
+
+# Publishes the site (site/) to GitHub Pages when it, or an image it shows, changes on main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - docs/images/**
+      - packaging/icon/AppIcon.svg
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+# One deployment at a time; a newer push waits rather than cancelling one in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # en/ and fr/ share site/assets/ (the root page sends visitors to en/). The app icon
+      # and the panel screenshot (social preview image) are copied there, not duplicated in git.
+      - run: |
+          mkdir -p _site/assets
+          cp -R site/. _site/
+          cp docs/images/panel.png packaging/icon/AppIcon.svg _site/assets/
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
