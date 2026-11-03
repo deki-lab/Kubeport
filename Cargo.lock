@@ -1213,6 +1213,7 @@ dependencies = [
  "futures",
  "k8s-openapi",
  "kube",
+ "libc",
  "serde",
  "thiserror",
  "tokio",

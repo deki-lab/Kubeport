@@ -74,7 +74,7 @@ Editing from the app rewrites this file, so comments you add by hand are not kep
 
 Kubeport opens the same kind of tunnel as `kubectl port-forward`, with the same limits:
 
-- **Other accounts on the Mac.** The local port accepts any process on this Mac, under any user account, and reaches the pod with your Kubernetes identity. macOS cannot tell which account opened a TCP connection, so Kubeport cannot filter by user. On a Mac shared with other accounts, forward only services that ask for their own credentials. An Active Forward keeps its local port from activation until you turn it off, even while it reconnects or is in Error, so no other process can take the port in the meantime.
+- **Other accounts on the Mac.** Every account on the Mac can reach the loopback, so the local port checks who connects. Kubeport finds the process behind each connection and serves it only if it runs under your account. Connections from another account or from root are closed at once. An Active Forward keeps its local port from activation until you turn it off, even while it reconnects or is in Error, so no other process can take the port in the meantime.
 - **Web pages.** A page open in your browser can reach `localhost` ports through DNS rebinding. A forwarded HTTP service should check the `Host` header and require authentication, as it would behind `kubectl port-forward`.
 - **Idle timeout.** A Forward you no longer use stays open until you turn it off. Set a default idle timeout in Settings to close forgotten ones.
 - **Auth plugin errors.** When a kubeconfig `exec` plugin fails, Kubeport shows its exit status only, never its arguments, environment or output, which can hold secrets.

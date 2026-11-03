@@ -292,6 +292,10 @@ async fn accept_loop<C: Cluster>(
                 let namespace = namespace.to_owned();
                 let fatal = fatal.clone();
                 connections.spawn(async move {
+                    if !from_this_user(&socket).await {
+                        tracing::warn!("connection from another user refused");
+                        return;
+                    }
                     match pipe(&cluster, &namespace, &target, socket).await {
                         Ok(()) => {}
                         Err(Fault::Fatal(reason)) => {
@@ -311,6 +315,16 @@ async fn accept_loop<C: Cluster>(
             }
         }
     }
+}
+
+/// Only the user running Kubeport may use its Kubernetes identity through a Forward.
+async fn from_this_user(socket: &TcpStream) -> bool {
+    let (Ok(local), Ok(peer)) = (socket.local_addr(), socket.peer_addr()) else {
+        return false;
+    };
+    tokio::task::spawn_blocking(move || crate::peer::same_user(local, peer))
+        .await
+        .unwrap_or(false)
 }
 
 async fn pipe<C: Cluster>(
