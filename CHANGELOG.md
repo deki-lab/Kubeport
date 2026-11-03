@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0](https://github.com/deki-lab/Kubeport/compare/v0.3.0...v0.4.0) (2026-11-03)
+
+
+### Features
+
+* close a Forward after an hour without connection on new installs ([#42](https://github.com/deki-lab/Kubeport/issues/42)) ([e06c74a](https://github.com/deki-lab/Kubeport/commit/e06c74a90d309f14974b845ab6eb6248239da60c))
+* do not restore a Forward edited while Kubeport was closed ([#43](https://github.com/deki-lab/Kubeport/issues/43)) ([a0930f0](https://github.com/deki-lab/Kubeport/commit/a0930f065bf9aac5a69d4f92422a912551e3ff3a))
+* move the config folder to Application Support/Kubeport ([#44](https://github.com/deki-lab/Kubeport/issues/44)) ([f158286](https://github.com/deki-lab/Kubeport/commit/f158286efecec74b5cd3b2ff19c33735e0690f76))
+* show the app's machine and pod in the Forward chips ([#40](https://github.com/deki-lab/Kubeport/issues/40)) ([15866c5](https://github.com/deki-lab/Kubeport/commit/15866c578847de2bd4e37a12800a8beeec36780a))
+
 ## [0.3.0](https://github.com/deki-lab/Kubeport/compare/v0.2.0...v0.3.0) (2026-11-03)
 
 
