@@ -39,6 +39,14 @@ The app is not signed with an Apple Developer ID yet, so macOS blocks it the fir
 2. Go to **System Settings › Privacy & Security**.
 3. Click **Open Anyway** next to Kubeport, then confirm.
 
+Or allow it from the Terminal, before opening it the first time:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Kubeport.app
+```
+
+This removes the download mark that makes macOS block the app. Run it only on a Kubeport installed from this repository's releases or the Homebrew tap.
+
 ## Usage
 
 Click the Kubeport icon in the menu bar.
