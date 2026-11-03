@@ -177,13 +177,35 @@ pub(crate) fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     written
 }
 
+/// Folder of the config and `state.toml`, relative to the home directory.
+const DIR: &str = "Library/Application Support/Kubeport";
+/// Folder used before the app was named Kubeport.
+const LEGACY_DIR: &str = "Library/Application Support/k8s_forwarder";
+
+/// The config path under `home`. Moves the folder of an earlier version to `DIR` first,
+/// once: only when it exists and `DIR` does not. If the move fails, the old folder stays
+/// in use rather than starting from an empty config.
+fn config_path_in(home: &Path) -> PathBuf {
+    let dir = home.join(DIR);
+    let legacy = home.join(LEGACY_DIR);
+    if !dir.exists()
+        && legacy.is_dir()
+        && let Err(e) = std::fs::rename(&legacy, &dir)
+    {
+        tracing::warn!("moving {} to {}: {e}", legacy.display(), dir.display());
+        return legacy.join("config.toml");
+    }
+    dir.join("config.toml")
+}
+
 impl Config {
-    /// Default location: `~/Library/Application Support/k8s_forwarder/config.toml`.
+    /// Default location: `~/Library/Application Support/Kubeport/config.toml`. The folder
+    /// of an earlier version (`k8s_forwarder`) is moved there on first use.
     pub fn default_path() -> PathBuf {
         // Never a path relative to the working directory: without a usable HOME,
         // fall back to the account's home directory.
         let home = std::env::home_dir().unwrap_or_else(|| PathBuf::from("/var/empty"));
-        home.join("Library/Application Support/k8s_forwarder/config.toml")
+        config_path_in(&home)
     }
 
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
@@ -534,6 +556,51 @@ remote_port = 80
         assert!(text.starts_with("# Kubeport Forwards"));
         assert_eq!(Config::load(&path).unwrap(), config);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn home(tag: &str) -> PathBuf {
+        let home = std::env::temp_dir().join(format!("kubeport-home-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("Library/Application Support")).unwrap();
+        home
+    }
+
+    #[test]
+    fn the_config_of_an_earlier_version_moves_to_the_kubeport_folder() {
+        let home = home("move");
+        let legacy = home.join(LEGACY_DIR);
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("config.toml"), "# mine").unwrap();
+        std::fs::write(legacy.join("state.toml"), "active = []").unwrap();
+
+        let path = config_path_in(&home);
+
+        assert_eq!(
+            path,
+            home.join("Library/Application Support/Kubeport/config.toml")
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "# mine");
+        assert!(path.with_file_name("state.toml").exists());
+        assert!(!legacy.exists());
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn an_existing_kubeport_folder_is_never_replaced() {
+        let home = home("both");
+        std::fs::create_dir_all(home.join(LEGACY_DIR)).unwrap();
+        std::fs::create_dir_all(home.join(DIR)).unwrap();
+        assert_eq!(config_path_in(&home), home.join(DIR).join("config.toml"));
+        assert!(home.join(LEGACY_DIR).exists());
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn a_fresh_install_uses_the_kubeport_folder() {
+        let home = home("fresh");
+        assert_eq!(config_path_in(&home), home.join(DIR).join("config.toml"));
+        assert!(!home.join(LEGACY_DIR).exists());
+        std::fs::remove_dir_all(home).unwrap();
     }
 
     #[test]

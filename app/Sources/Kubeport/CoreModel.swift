@@ -123,7 +123,7 @@ final class CoreModel {
     /// Config file path, known even when the core could not start.
     var configPath: String {
         core?.configPath() ?? Self.configOverride ?? FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/k8s_forwarder/config.toml").path
+            .appendingPathComponent("Library/Application Support/Kubeport/config.toml").path
     }
 
     // MARK: Commands
