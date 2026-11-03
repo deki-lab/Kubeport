@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 use crate::cluster::Connector;
 use crate::cluster::kube::{KubeConnector, KubeEnv};
 use crate::config::Config;
-use crate::forward;
+use crate::forward::{self, LocalPort};
 use crate::state::{ForwardStatus, RealState, Reason};
 
 pub type Statuses = BTreeMap<String, ForwardStatus>;
@@ -25,6 +25,9 @@ pub struct Manager<C: Connector = KubeConnector> {
     config: Config,
     connector: C,
     running: HashMap<String, (CancellationToken, JoinHandle<()>)>,
+    /// Local port of each Active Forward: kept across reconnections and Errors,
+    /// released only when the Forward becomes Inactive.
+    ports: HashMap<String, Arc<LocalPort>>,
     status: watch::Sender<Statuses>,
     expired_tx: mpsc::UnboundedSender<String>,
     expired_rx: Option<mpsc::UnboundedReceiver<String>>,
@@ -50,6 +53,7 @@ impl<C: Connector> Manager<C> {
             config,
             connector,
             running: HashMap::new(),
+            ports: HashMap::new(),
             status: watch::channel(statuses).0,
             expired_tx,
             expired_rx: Some(expired_rx),
@@ -91,9 +95,7 @@ impl<C: Connector> Manager<C> {
             .collect();
         for rival in &rivals {
             // Wait for the competitor to finish: it must release the local port before we open it.
-            if let Some(task) = self.stop(rival) {
-                let _ = task.await;
-            }
+            self.release(rival).await;
         }
 
         let token = CancellationToken::new();
@@ -101,27 +103,50 @@ impl<C: Connector> Manager<C> {
         report(RealState::Reconnecting(Reason::ConnectingToCluster));
         let idle = self.idle(name, &forward, token.clone());
 
+        let port = match self.ports.get(name) {
+            Some(port) => Some(port.clone()),
+            None => match LocalPort::bind(forward.local_port).await {
+                Ok(port) => {
+                    let port = Arc::new(port);
+                    self.ports.insert(name.to_owned(), port.clone());
+                    Some(port)
+                }
+                Err(reason) => {
+                    report(RealState::Error(reason));
+                    None
+                }
+            },
+        };
         let kubeconfig = self.config.kubeconfig.clone();
-        let task = match self
-            .connector
-            .cluster(kubeconfig.as_deref(), &forward.context)
-            .await
-        {
-            Ok(cluster) => {
-                tokio::spawn(forward::run(forward, cluster, report, idle, token.clone()))
-            }
-            Err(reason) => {
-                report(RealState::Error(reason));
-                tokio::spawn(async {})
-            }
+        let task = match port {
+            None => tokio::spawn(async {}),
+            Some(port) => match self
+                .connector
+                .cluster(kubeconfig.as_deref(), &forward.context)
+                .await
+            {
+                Ok(cluster) => tokio::spawn(forward::run(
+                    forward,
+                    cluster,
+                    port,
+                    report,
+                    idle,
+                    token.clone(),
+                )),
+                Err(reason) => {
+                    report(RealState::Error(reason));
+                    tokio::spawn(forward::hold(port, token.clone()))
+                }
+            },
         };
         self.running.insert(name.to_owned(), (token, task));
         Ok(rivals)
     }
 
-    /// Makes a Forward Inactive: its connections are cut.
+    /// Makes a Forward Inactive: its connections are cut and its local port released.
     pub fn deactivate(&mut self, name: &str) {
         self.stop(name);
+        self.ports.remove(name);
     }
 
     pub fn deactivate_all(&mut self) {
@@ -132,6 +157,7 @@ impl<C: Connector> Manager<C> {
     }
 
     /// Restarts every Active Forward with fresh clients (wake-up, network change).
+    /// Local ports stay bound throughout.
     pub async fn reconnect_all(&mut self) {
         let names = self.stop_all().await;
         self.connector.forget();
@@ -158,11 +184,14 @@ impl<C: Connector> Manager<C> {
             if unchanged && !new_kubeconfig && !idle_changed {
                 continue;
             }
-            if let Some(task) = self.stop(&name) {
-                let _ = task.await;
-            }
             if unchanged {
+                // Restarted below: the local port stays bound.
+                if let Some(task) = self.stop(&name) {
+                    let _ = task.await;
+                }
                 restart.push(name);
+            } else {
+                self.release(&name).await;
             }
         }
         if new_kubeconfig {
@@ -199,7 +228,16 @@ impl<C: Connector> Manager<C> {
         names
     }
 
+    /// Stops a Forward, waits for its task, then releases its local port.
+    async fn release(&mut self, name: &str) {
+        if let Some(task) = self.stop(name) {
+            let _ = task.await;
+        }
+        self.ports.remove(name);
+    }
+
     /// Cancels a Forward, publishes Inactive and returns its task for whoever wants to await it.
+    /// The local port stays bound: `release` or `deactivate` drop it.
     fn stop(&mut self, name: &str) -> Option<JoinHandle<()>> {
         let task = self.running.remove(name).map(|(token, task)| {
             // Cancel before writing: a late report will see the cancelled token.
@@ -299,7 +337,8 @@ mod lifecycle_tests {
             .iter()
             .map(|(name, svc, port)| {
                 format!(
-                    "[[forward]]\nname = \"{name}\"\ncontext = \"c\"\nnamespace = \"n\"\nservice = \"{svc}\"\nremote_port = 80\nlocal_port = {port}\n\n"
+                    "[[forward]]\nname = \"{name}\"\ncontext = \"c\"\nnamespace = \"n\"\nservice = \"{svc}\"\nremote_port = 80\nlocal_port = {}\n\n",
+                    crate::test_port(*port)
                 )
             })
             .collect();
@@ -633,6 +672,87 @@ mod runtime_tests {
             matches!(s, Some(RealState::Error(Reason::AccessDenied { .. })))
         })
         .await;
+    }
+
+    fn bound(port: u16) -> bool {
+        std::net::TcpListener::bind(("127.0.0.1", port)).is_err()
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_error_keeps_the_local_port_until_deactivation() {
+        let (mut m, cluster, port) =
+            manager(forward(Target::Service("web".into()), IdleTimeout::Never));
+        cluster.set_service("n", service("web", "web"));
+        cluster.apply_pod("n", pod("a", "web", 100, true));
+        m.activate("f").await.unwrap();
+        wait(&m, "connected", connected_to("a")).await;
+        cluster.fail_next_connect(Fault::Fatal(Reason::AccessDenied {
+            detail: "pods/portforward".into(),
+        }));
+        let _socket = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        wait(&m, "access denied", |s| {
+            matches!(s, Some(RealState::Error(Reason::AccessDenied { .. })))
+        })
+        .await;
+
+        // In Error: the port stays taken and each new connection is closed at once.
+        assert!(bound(port), "port kept in Error");
+        let mut refused = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let mut buf = [0u8; 1];
+        let read = tokio::time::timeout(Duration::from_secs(5), refused.read(&mut buf))
+            .await
+            .expect("closed at once");
+        assert!(matches!(read, Ok(0) | Err(_)), "closed, got {read:?}");
+
+        m.deactivate("f");
+        let released = tokio::time::timeout(Duration::from_secs(5), async {
+            while bound(port) {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await;
+        assert!(released.is_ok(), "port released once Inactive");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reconnecting_keeps_the_local_port() {
+        let (mut m, cluster, port) =
+            manager(forward(Target::Service("web".into()), IdleTimeout::Never));
+        cluster.set_service("n", service("web", "web"));
+        cluster.apply_pod("n", pod("a", "web", 100, true));
+        m.activate("f").await.unwrap();
+        wait(&m, "connected", connected_to("a")).await;
+
+        // Between the stop and the restart, nobody else can bind the port.
+        let names = m.stop_all().await;
+        assert!(bound(port), "port kept while restarting");
+        for name in names {
+            m.activate(&name).await.unwrap();
+        }
+        m.reconnect_all().await;
+        wait(&m, "back", connected_to("a")).await;
+        assert_eq!(open(port).await.0, "a");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn localhost_over_ipv6_reaches_the_forward() {
+        if std::net::TcpListener::bind("[::1]:0").is_err() {
+            // No IPv6 loopback on this machine: nothing to check.
+            return;
+        }
+        let (mut m, cluster, port) =
+            manager(forward(Target::Service("web".into()), IdleTimeout::Never));
+        cluster.set_service("n", service("web", "web"));
+        cluster.apply_pod("n", pod("a", "web", 100, true));
+        m.activate("f").await.unwrap();
+        wait(&m, "connected", connected_to("a")).await;
+        let mut stream = BufReader::new(TcpStream::connect(("::1", port)).await.unwrap());
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(5), stream.read_line(&mut line))
+            .await
+            .expect("pod answers")
+            .unwrap();
+        assert_eq!(line.trim(), "a");
     }
 
     #[tokio::test(flavor = "current_thread")]

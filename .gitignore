@@ -6,3 +6,11 @@
 /app/KubeportFFI.xcframework/
 /app/Sources/Kubeport/Generated/
 .claude/
+
+# Secrets: never committed.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+kubeconfig*

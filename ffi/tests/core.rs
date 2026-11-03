@@ -151,7 +151,7 @@ async fn form_on_docker_desktop() {
     recorder
         .wait("w Connected", |v| {
             v.iter()
-                .any(|f| matches!(f.state, Some(kubeport_ffi::RealStateView::Connected { .. })))
+                .any(|f| matches!(f.state, Some(kubeport_core::RealState::Connected { .. })))
         })
         .await;
 

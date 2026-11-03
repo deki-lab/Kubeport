@@ -8,7 +8,8 @@ use std::fmt;
 /// Cause of a Reconnecting or Error state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reason {
-    // Transient causes (Reconnecting).
+    // Transient causes (Reconnecting); ApiError is an Error for a client error that a
+    // retry cannot fix.
     ConnectingToCluster,
     SearchingPod,
     NoReadyPod,

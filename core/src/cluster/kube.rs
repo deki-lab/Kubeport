@@ -8,6 +8,7 @@ use futures::StreamExt;
 use futures::stream::BoxStream;
 use k8s_openapi::api::core::v1::{Pod, Service};
 use kube::api::Api;
+use kube::client::AuthError;
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use kube::runtime::{WatchStreamExt, watcher};
 use kube::{Client, Config as KubeConfig};
@@ -77,7 +78,7 @@ impl KubeConnector {
                 detail: format!("{context}: {e}"),
             })?;
         let client = Client::try_from(config).map_err(|e| Reason::Kubeconfig {
-            detail: format!("{context}: {e}"),
+            detail: format!("{context}: {}", describe(&e)),
         })?;
         self.clients.insert(context.to_owned(), client.clone());
         Ok(client)
@@ -186,7 +187,16 @@ impl Cluster for KubeCluster {
         let mut forwarder = Api::<Pod>::namespaced(self.client.clone(), namespace)
             .portforward(pod, &[port])
             .await
-            .map_err(|e| classify(&e))?;
+            .map_err(|e| match e {
+                // The pod went away between two watch events: the watch moves the
+                // Resolved pod, only this connection fails.
+                kube::Error::Api(status) if status.code == 404 => {
+                    Fault::Transient(Reason::PodNotReady {
+                        pod: pod.to_owned(),
+                    })
+                }
+                e => classify(&e),
+            })?;
         let stream = forwarder.take_stream(port).ok_or_else(|| {
             Fault::Transient(Reason::ApiUnreachable {
                 detail: "port-forward stream missing".into(),
@@ -243,10 +253,10 @@ fn classify(err: &kube::Error) -> Fault {
     match err {
         kube::Error::Api(status) => classify_status(status.code, &status.message),
         kube::Error::Auth(e) => Fault::Fatal(Reason::AuthFailed {
-            detail: e.to_string(),
+            detail: describe_auth(e),
         }),
         other => Fault::Transient(Reason::ApiUnreachable {
-            detail: other.to_string(),
+            detail: describe(other),
         }),
     }
 }
@@ -257,7 +267,41 @@ fn classify_status(code: u16, message: &str) -> Fault {
         401 => Fault::Fatal(Reason::AuthFailed { detail }),
         403 => Fault::Fatal(Reason::AccessDenied { detail }),
         404 => Fault::Fatal(Reason::NotFound { detail }),
+        // Timeout, conflict, expired watch, rate limit: retrying helps.
+        408 | 409 | 410 | 429 => Fault::Transient(Reason::ApiError { code, detail }),
+        // Any other client error stays the same on every retry.
+        400..=499 => Fault::Fatal(Reason::ApiError { code, detail }),
         _ => Fault::Transient(Reason::ApiError { code, detail }),
+    }
+}
+
+/// Text of a kube-rs error that is safe to show in the panel, a notification or the CLI.
+/// An auth error found anywhere in the chain (a token refresh fails inside the client's
+/// middleware) is described by `describe_auth` instead of the whole chain.
+fn describe(err: &kube::Error) -> String {
+    if let kube::Error::Auth(e) = err {
+        return describe_auth(e);
+    }
+    let mut source = std::error::Error::source(err);
+    while let Some(e) = source {
+        if let Some(auth) = e.downcast_ref::<AuthError>() {
+            return describe_auth(auth);
+        }
+        source = e.source();
+    }
+    err.to_string()
+}
+
+/// kube-rs puts an `exec` plugin's arguments, environment and output in its error text;
+/// they can hold secrets (`--client-secret`, tokens). Keep the exit status only.
+fn describe_auth(err: &AuthError) -> String {
+    match err {
+        AuthError::AuthExecRun { out, .. } => {
+            format!("auth exec plugin failed ({})", out.status)
+        }
+        AuthError::AuthExecParse(_) => "auth exec plugin returned an unreadable credential".into(),
+        AuthError::AuthExec(_) => "auth exec plugin failed".into(),
+        other => other.to_string(),
     }
 }
 
@@ -343,6 +387,56 @@ users:
         assert_eq!(path_of(0).as_deref(), Some("/opt/homebrew/bin:/usr/bin"));
         assert_eq!(path_of(1).as_deref(), Some("/custom"));
         assert!(kc.auth_infos[2].auth_info.as_ref().unwrap().exec.is_none());
+    }
+
+    #[test]
+    fn exec_plugin_errors_never_show_args_env_or_output() {
+        use std::os::unix::process::ExitStatusExt;
+        let out = std::process::Output {
+            status: std::process::ExitStatus::from_raw(256),
+            stdout: b"SECRET_STDOUT".to_vec(),
+            stderr: b"SECRET_STDERR".to_vec(),
+        };
+        let run = AuthError::AuthExecRun {
+            cmd: r#"TOKEN="SECRET_ENV" "kubelogin" "--client-secret=SECRET_ARG""#.into(),
+            out: Box::new(out),
+        };
+        let leaked = |text: &str| text.contains("SECRET");
+
+        let direct = describe(&kube::Error::Auth(run));
+        assert!(!leaked(&direct), "{direct}");
+        assert!(direct.contains("exit status: 1"), "{direct}");
+
+        // A failed token refresh comes back wrapped by the client's middleware.
+        let run = AuthError::AuthExecRun {
+            cmd: "SECRET_ARG".into(),
+            out: Box::new(std::process::Output {
+                status: std::process::ExitStatus::from_raw(256),
+                stdout: b"SECRET_STDOUT".to_vec(),
+                stderr: Vec::new(),
+            }),
+        };
+        let wrapped = describe(&kube::Error::Service(Box::new(run)));
+        assert!(!leaked(&wrapped), "{wrapped}");
+
+        let exec = describe(&kube::Error::Auth(AuthError::AuthExec(
+            "Executing SECRET_ARG failed".into(),
+        )));
+        assert!(!leaked(&exec), "{exec}");
+    }
+
+    #[test]
+    fn permanent_client_errors_are_fatal() {
+        assert!(matches!(
+            classify_status(422, "invalid"),
+            Fault::Fatal(Reason::ApiError { code: 422, .. })
+        ));
+        for code in [408, 409, 410, 429] {
+            assert!(
+                matches!(classify_status(code, "retry"), Fault::Transient(_)),
+                "{code}"
+            );
+        }
     }
 
     #[test]

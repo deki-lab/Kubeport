@@ -8,7 +8,7 @@ func L(_ key: String, _ args: String...) -> String {
     return args.isEmpty ? format : String(format: format, arguments: args)
 }
 
-extension ReasonView {
+extension Reason {
     var text: String {
         switch self {
         case .connectingToCluster: L("reason.connectingToCluster")
@@ -45,7 +45,7 @@ extension Notice {
     }
 }
 
-extension FormField {
+extension Field {
     var text: String {
         switch self {
         case .name: L("form.name")
@@ -61,8 +61,13 @@ func idleDuration(_ minutes: UInt32) -> String {
     minutes % 60 == 0 ? L("idle.hours", String(minutes / 60)) : L("idle.minutes", String(minutes))
 }
 
-/// Choices offered for the Idle timeout, in minutes.
-let idleChoices: [UInt32] = [15, 60, 240]
+/// Choices offered for the Idle timeout, in minutes: the usual ones, plus `current`
+/// when it was set by hand in the config file (otherwise the menu shows no selection).
+func idleChoices(including current: UInt32?) -> [UInt32] {
+    let standard: [UInt32] = [15, 60, 240]
+    guard let current, !standard.contains(current) else { return standard }
+    return (standard + [current]).sorted()
+}
 
 /// Label of a default setting: "Never" or a duration.
 func idleDefaultLabel(_ minutes: UInt32?) -> String {

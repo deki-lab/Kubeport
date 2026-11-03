@@ -15,11 +15,12 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md). Architecture decisions: [docs/adr/](docs
 
 ## Build and test
 
-Requirements: stable Rust and Xcode (for `xcodebuild -create-xcframework`).
+Requirements: Rust (the version in `rust-toolchain.toml`, installed by rustup) and Xcode (for `xcodebuild -create-xcframework`).
 
 ```sh
 cargo test --all                          # Rust core and FFI bridge
 ./scripts/build-app.sh                    # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg
+swift test --package-path app             # app logic without SwiftUI (after build-app.sh)
 python3 scripts/check-l10n.py             # translations: missing or unused keys, placeholders
 ./scripts/measure-footprint.sh            # memory of the running app (budget: 35 MB)
 ```
