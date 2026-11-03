@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kubeport: Kubernetes port-forwards in your macOS menu bar</title>
+<meta name="description" content="Kubernetes port-forwards from the macOS menu bar. Set up a Forward once, turn it on with a switch. It follows the pods behind a Service through rollouts and turns itself off when idle.">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://deki-lab.github.io/Kubeport/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Kubeport: Kubernetes port-forwards in your macOS menu bar">
+<meta property="og:description" content="Set up a Forward once, turn it on with a switch. It follows the pods behind a Service through rollouts. Free and open source.">
+<meta property="og:image" content="https://deki-lab.github.io/Kubeport/assets/panel.png">
+<meta property="og:image:alt" content="The Kubeport panel with three Active Forwards">
+<meta property="og:url" content="https://deki-lab.github.io/Kubeport/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="assets/AppIcon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy: #0F172A;
+  --navy-2: #1B2540;
+  --paper: #F4F6F9;
+  --surface: #FFFFFF;
+  --ink: #0F172A;
+  --muted: #4A5872;
+  --line: #D6DDE7;
+  --mint: #34D399;
+  --ok: #059669;        /* connected, 3.8:1 on white */
+  --focus: #047857;     /* focus ring on the light page */
+  --amber: #A16207;
+  --alert: #D1343A;
+  --code-bg: #0F172A;
+  --code-ink: #E2E8F0;
+  --sans: "Schibsted Grotesk", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --system: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0B1220;
+    --surface: #131C30;
+    --ink: #E6EBF2;
+    --muted: #9AA8BE;
+    --line: #26324A;
+    --ok: #34D399;
+    --focus: #34D399;
+    --amber: #E3AE2D;
+    --alert: #F26A6F;
+    --code-bg: #060B16;
+    color-scheme: dark;
+  }
+  /* The desktop stays a shade lighter than the page below it. */
+  .desktop { background: var(--navy-2); }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1.0625rem/1.6 var(--sans);
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: inherit; text-underline-offset: 0.18em; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+.wrap { width: min(1120px, 100% - 2rem); margin-inline: auto; }
+code, pre { font-family: var(--mono); }
+.nowrap { white-space: nowrap; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Hero: a Mac desktop in dark mode, with Kubeport open in the menu bar. */
+.desktop {
+  background: var(--navy);
+  color: #E6EBF2;
+  overflow: hidden;
+}
+.desktop :focus-visible { outline-color: var(--mint); }
+.menubar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1.1rem;
+  height: 30px;
+  padding-inline: 1rem;
+  background: rgba(255, 255, 255, 0.07);
+  font: 500 13px/1 var(--system);
+  color: #F1F5F9;
+}
+.menubar .app { margin-right: auto; display: flex; gap: 1.25rem; }
+.menubar .app b { font-weight: 700; }
+.menubar svg { display: block; }
+.menubar .open {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 5px;
+  padding: 3px 6px;
+}
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
+  gap: 3rem;
+  padding-block: 4.5rem 5rem;
+  align-items: start;
+}
+.hero h1 {
+  font-weight: 800;
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  margin: 0 0 1.5rem;
+  text-wrap: balance;
+}
+.hero .lede {
+  text-wrap: pretty;
+  font-size: 1.25rem;
+  line-height: 1.5;
+  color: #B8C3D6;
+  max-width: 36rem;
+  margin: 0 0 2.25rem;
+}
+.hero .lede code { color: #E6EBF2; }
+.hero .panel {
+  margin-top: -4.5rem; /* hangs from the menu bar */
+  margin-right: calc((100vw - min(1120px, 100vw - 2rem)) / -2 + 1rem);
+  justify-self: end;
+  width: 321px;
+  filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.55));
+}
+.install {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  max-width: 36rem;
+  color: var(--code-ink);
+}
+.install pre {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  font-size: 0.92rem;
+  line-height: 1.75;
+  overflow-x: auto;
+}
+.install .bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0.6rem 0.55rem 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.9rem;
+  color: #A3B0C5;
+}
+button.copy {
+  font: 500 0.85rem/1 var(--sans);
+  color: #E6EBF2;
+  background: rgba(255, 255, 255, 0.1);
+  border: 0;
+  border-radius: 6px;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+}
+button.copy:hover { background: rgba(255, 255, 255, 0.18); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; margin-top: 1.5rem; align-items: center; }
+.button {
+  display: inline-block;
+  background: var(--mint);
+  color: var(--navy);
+  font-weight: 700;
+  text-decoration: none;
+  padding: 0.7rem 1.15rem;
+  border-radius: 8px;
+}
+.button:hover { background: #5EE0B0; }
+.hero .meta { color: #A3B0C5; font-size: 0.95rem; margin-top: 1.75rem; max-width: 36rem; }
+
+/* Sections */
+section { padding-block: 5.5rem; }
+section + section { border-top: 1px solid var(--line); }
+h2 {
+  font-weight: 800;
+  font-size: clamp(1.9rem, 3.6vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  margin: 0 0 1rem;
+  max-width: 22ch;
+  text-wrap: balance;
+}
+.intro { text-wrap: pretty; color: var(--muted); font-size: 1.15rem; max-width: 40rem; margin: 0 0 3rem; }
+.intro code, .note code, .facts code { font-size: 0.92em; }
+
+/* Rollout: kubectl next to Kubeport, on the app icon's drawing. */
+.lanes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+.lane {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1.25rem 1.25rem 1.1rem;
+}
+.lane h3 { margin: 0; font: 700 1rem/1.4 var(--sans); }
+.lane h3 code { font: 500 0.95rem/1.4 var(--mono); }
+.lane svg { display: block; width: 100%; max-width: 520px; height: auto; margin-block: 0.5rem; overflow: visible; }
+.lane .status { margin: 0; min-height: 3.3em; font-size: 0.98rem; color: var(--muted); }
+.lane .status strong { color: var(--ink); }
+.machine { fill: none; stroke: var(--ink); stroke-width: 5; }
+.link { stroke-width: 5; stroke-linecap: round; transition: stroke 400ms, opacity 400ms; }
+.link.up { stroke: var(--ok); }
+.link.wait { stroke: var(--amber); stroke-dasharray: 2 10; }
+.link.down { stroke: var(--alert); stroke-dasharray: 2 10; }
+.link.draw { stroke-dasharray: 400; stroke-dashoffset: 400; animation: draw 600ms ease-out forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.pod { transition: fill 500ms, stroke 500ms, opacity 600ms; stroke-width: 4; stroke-linejoin: round; }
+.pod.ready { fill: var(--ok); stroke: var(--ok); }
+.pod.dying { fill: none; stroke: var(--muted); stroke-dasharray: 6 6; }
+.pod.starting { fill: none; stroke: var(--muted); stroke-dasharray: 3 6; }
+.pod.gone { opacity: 0; }
+.label { font: 500 15px var(--mono); fill: var(--muted); transition: opacity 400ms; }
+.label.strong { fill: var(--ink); }
+.hidden { opacity: 0; }
+.replay {
+  margin-top: 1.5rem;
+  font: 500 0.95rem/1 var(--sans);
+  color: var(--ink);
+  background: none;
+  border: 1px solid var(--muted);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+}
+.replay:hover { background: var(--surface); }
+
+/* Features: the form, three things to know, then the specs. */
+.features { display: grid; grid-template-columns: minmax(0, 321px) minmax(0, 1fr); gap: 4rem; align-items: start; }
+.features img { border-radius: 12px; }
+.features .intro { margin-bottom: 2rem; }
+.facts { margin: 0; border-top: 1px solid var(--line); }
+.facts > div {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+  gap: 0.25rem 2rem;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.facts dt { font-weight: 700; font-size: 1.1rem; line-height: 1.4; }
+.facts dd { margin: 0; color: var(--muted); max-width: 42rem; }
+.specs { margin-top: 4rem; }
+.specs .facts > div { padding-block: 0.8rem; }
+.specs h3 { margin: 0 0 1rem; font-size: 1.1rem; }
+
+/* Install */
+.steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3rem; }
+.steps h3 { font-size: 1.2rem; margin: 0 0 0.75rem; }
+.steps p, .steps li { color: var(--muted); }
+.steps b { color: var(--ink); font-weight: 700; }
+.steps ol { padding-left: 1.25rem; margin: 0 0 1.25rem; }
+.steps li { margin-bottom: 0.35rem; }
+.steps .install { background: var(--code-bg); max-width: none; margin: 0 0 1rem; }
+.steps .install pre { font-size: 0.88rem; line-height: 1.7; }
+.note { font-size: 0.95rem; }
+
+/* Security */
+.security .note { margin: 2rem 0 0; max-width: 42rem; font-size: 1rem; }
+
+footer { border-top: 1px solid var(--line); padding-block: 2.5rem 3rem; color: var(--muted); font-size: 0.95rem; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; }
+footer .brand { display: flex; align-items: center; gap: 0.6rem; color: var(--ink); font-weight: 700; margin-right: auto; }
+footer nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; }
+
+@media (min-width: 640px) {
+  .hero h1 .keep { white-space: nowrap; }
+}
+@media (max-width: 860px) {
+  .hero { grid-template-columns: minmax(0, 1fr); padding-block: 3rem 3.5rem; gap: 2.5rem; }
+  .hero .panel { margin: 0 auto; justify-self: center; width: min(321px, 100%); }
+  .menubar .app, .menubar .wifi { display: none; }
+  .lanes, .steps { grid-template-columns: minmax(0, 1fr); }
+  .features { grid-template-columns: minmax(0, 1fr); gap: 2.5rem; }
+  .features img { max-width: min(321px, 100%); }
+  section { padding-block: 4rem; }
+}
+@media (max-width: 560px) {
+  .label { font-size: 21px; }  /* the drawing is scaled down to 58%: keep the text near 12 px */
+  .install pre { font-size: 0.74rem; padding: 0.9rem; }
+  .steps .install pre { font-size: 0.74rem; }
+  .facts > div { grid-template-columns: minmax(0, 1fr); }
+  .lane { padding-inline: 1rem; }
+  .lane .status { min-height: 5em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  .replay { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="desktop">
+  <div class="menubar" aria-hidden="true">
+    <span class="app"><b>Terminal</b><span>Shell</span><span>Edit</span><span>View</span></span>
+    <span class="open">
+      <svg width="27" height="16" viewBox="0 0 27 16"><rect x="1.75" y="3.75" width="8.5" height="8.5" rx="2" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M10.25 8H14.5" stroke="#fff" stroke-width="1.5"/><polygon points="20.1,14.75 25.95,11.38 25.95,4.63 20.1,1.25 14.25,4.63 14.25,11.38" fill="#fff"/></svg>
+    </span>
+    <svg class="wifi" width="17" height="13" viewBox="0 0 17 13"><path d="M8.5 12.2 6.4 9.9a3 3 0 0 1 4.2 0Zm-4-4.3a5.8 5.8 0 0 1 8 0l1.4-1.5a7.9 7.9 0 0 0-10.8 0Zm-2.8-3a9.9 9.9 0 0 1 13.6 0L16.7 3.4a12 12 0 0 0-16.4 0Z" fill="#F1F5F9"/></svg>
+    <span>Tue 11:44</span>
+  </div>
+  <div class="wrap hero">
+    <div>
+      <h1>Kubernetes <span class="keep">port-forwards</span> <span class="keep">in your menu bar.</span></h1>
+      <p class="lede">Set up a Forward once, then switch it on. Aim it at a Service and Kubeport follows the pods: after a rollout or a crash, the next connection to <code>localhost</code> reaches a Ready pod.</p>
+      <div class="install">
+        <div class="bar"><span>Install with Homebrew</span><button class="copy" type="button" data-copy="brew" aria-label="Copy the Homebrew commands">Copy</button></div>
+<pre id="brew" tabindex="0" aria-label="Homebrew commands">brew tap deki-lab/tap
+brew trust deki-lab/tap
+brew install --cask deki-lab/tap/kubeport</pre>
+      </div>
+      <div class="actions">
+        <a class="button" href="https://github.com/deki-lab/Kubeport/releases/latest">Download the .dmg</a>
+        <a href="https://github.com/deki-lab/Kubeport">Source on GitHub</a>
+      </div>
+      <p class="meta">Free and open source under the MIT license. For macOS 14 or later, on Apple silicon and Intel Macs. Kubeport is not signed with a Developer ID, so <a href="#first-launch">the first launch needs one extra step</a>.</p>
+    </div>
+    <img class="panel" src="assets/panel.png" width="321" height="286" alt="The Kubeport panel open under its menu bar icon: three Active Forwards with their local ports, two Inactive Forwards, and the master switch">
+  </div>
+</header>
+
+<main>
+  <section id="rollouts">
+    <div class="wrap">
+      <h2>A rollout no longer breaks your connection</h2>
+      <p class="intro"><code>kubectl port-forward svc/…</code> picks one pod and dies with it. Kubeport watches the Service: when that pod stops being Ready, new connections go to another Ready pod. Connections already open to the old pod close.</p>
+      <div class="lanes" id="lanes">
+        <figure class="lane" data-lane="kubectl">
+          <h3><code>kubectl port-forward svc/postgres 5432</code></h3>
+          <svg viewBox="0 0 520 170" role="img" aria-label="kubectl: the connection breaks when its pod is replaced">
+            <rect class="machine" x="20" y="60" width="50" height="50" rx="10"/>
+            <text class="label strong" x="20" y="140">localhost:5432</text>
+            <line class="link down hidden" data-el="link-a" x1="72" y1="80" x2="292" y2="45"/>
+            <line class="link up hidden" data-el="link-b" x1="72" y1="90" x2="292" y2="125"/>
+            <polygon class="pod dying gone" data-el="pod-a" points="320,15 346,30 346,60 320,75 294,60 294,30"/>
+            <polygon class="pod ready" data-el="pod-b" points="320,95 346,110 346,140 320,155 294,140 294,110"/>
+            <text class="label hidden" data-el="label-a" x="362" y="51">postgres-a</text>
+            <text class="label" data-el="label-b" x="362" y="131">postgres-b</text>
+          </svg>
+          <p class="status" data-el="status"><strong>error: lost connection to pod.</strong> Run the command again.</p>
+        </figure>
+        <figure class="lane" data-lane="kubeport">
+          <h3>Kubeport, a Forward on the Service postgres</h3>
+          <svg viewBox="0 0 520 170" role="img" aria-label="Kubeport: new connections move to the new pod">
+            <rect class="machine" x="20" y="60" width="50" height="50" rx="10"/>
+            <text class="label strong" x="20" y="140">localhost:5432</text>
+            <line class="link up hidden" data-el="link-a" x1="72" y1="80" x2="292" y2="45"/>
+            <line class="link up" data-el="link-b" x1="72" y1="90" x2="292" y2="125"/>
+            <polygon class="pod dying gone" data-el="pod-a" points="320,15 346,30 346,60 320,75 294,60 294,30"/>
+            <polygon class="pod ready" data-el="pod-b" points="320,95 346,110 346,140 320,155 294,140 294,110"/>
+            <text class="label hidden" data-el="label-a" x="362" y="51">postgres-a</text>
+            <text class="label" data-el="label-b" x="362" y="131">postgres-b</text>
+          </svg>
+          <p class="status" data-el="status"><strong>Connected</strong> to postgres-b on the same port. Nothing to restart.</p>
+        </figure>
+      </div>
+      <button class="replay" type="button" id="replay">Replay the rollout</button>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap features">
+      <img src="assets/new-forward.png" width="321" height="366" alt="The New Forward form: Context, namespace, Service or Pod, remote port, local port, name and auto-deactivate">
+      <div>
+        <h2>Pick from your cluster, then flip a switch</h2>
+        <p class="intro">Kubeport lives in the menu bar, in the style of the macOS Wi-Fi menu. No Dock icon, no window to manage.</p>
+        <dl class="facts">
+          <div><dt>Guided setup</dt><dd>Pick the Context, namespace, Service or Pod and port from lists read from your cluster. Kubeport fills in the local port and the name.</dd></div>
+          <div><dt>One switch per Forward</dt><dd>Turn a Forward on or off from its row. The master switch turns every Forward off, then brings the same ones back. Forwards that were on when you quit come back at the next launch.</dd></div>
+          <div><dt>Turns itself off</dt><dd>On a new install, a Forward with no connection for an hour turns itself off. Change the delay in Settings, or per Forward.</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="wrap specs">
+      <h3>Specs</h3>
+      <dl class="facts">
+        <div><dt>Kubeconfig</dt><dd>Any kubeconfig, including <code>exec</code> auth plugins for EKS, GKE, AKS and kubelogin. No <code>kubectl</code> needed.</dd></div>
+        <div><dt>Memory</dt><dd>About 17 MB with five Active Forwards.</dd></div>
+        <div><dt>Languages</dt><dd>English and French.</dd></div>
+        <div><dt>Appearance</dt><dd>Light and dark, following macOS.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>Install</h2>
+      <p class="intro">Kubeport needs macOS 14 or later, on an Apple silicon or Intel Mac.</p>
+      <div class="steps">
+        <div>
+          <h3>With Homebrew</h3>
+          <div class="install">
+            <div class="bar"><span>Terminal</span><button class="copy" type="button" data-copy="brew2" aria-label="Copy the Homebrew commands">Copy</button></div>
+<pre id="brew2" tabindex="0" aria-label="Homebrew commands">brew tap deki-lab/tap
+brew trust deki-lab/tap
+brew install --cask deki-lab/tap/kubeport</pre>
+          </div>
+          <p class="note"><code>brew trust</code> is there because Homebrew 7 and later asks you to trust third-party taps.</p>
+          <p>Or download the <code>.dmg</code> from the <a href="https://github.com/deki-lab/Kubeport/releases/latest">latest release</a> and drag Kubeport to Applications.</p>
+        </div>
+        <div id="first-launch">
+          <h3>First launch</h3>
+          <p>Kubeport is not signed with an Apple Developer ID yet, so macOS blocks it the first time.</p>
+          <ol>
+            <li>Open Kubeport once, then close the alert.</li>
+            <li>Go to <b>System Settings › Privacy &amp; Security</b>.</li>
+            <li>Click <b>Open Anyway</b> next to Kubeport, then confirm.</li>
+          </ol>
+          <p>Or remove the download mark from the Terminal, before you open Kubeport the first time:</p>
+          <div class="install">
+            <div class="bar"><span>Terminal</span><button class="copy" type="button" data-copy="xattr" aria-label="Copy the Terminal command">Copy</button></div>
+<pre id="xattr" tabindex="0" aria-label="Terminal command">xattr -dr com.apple.quarantine /Applications/Kubeport.app</pre>
+          </div>
+          <p class="note">Run it only on a Kubeport installed from the releases page or the Homebrew tap.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="security" class="security">
+    <div class="wrap">
+      <h2>Only your account can use a forwarded port</h2>
+      <p class="intro">Kubeport opens the same kind of tunnel as <code>kubectl port-forward</code>, with the same limits.</p>
+      <dl class="facts">
+        <div><dt>Only your account</dt><dd>The local port checks who connects. Connections from another account or from root are closed at once.</dd></div>
+        <div><dt>Loopback only</dt><dd>Forwards listen on 127.0.0.1, and on ::1 when your Mac has IPv6. An Active Forward keeps its port until you turn it off, even while it reconnects, so no other process can take it.</dd></div>
+        <div><dt>No leaked secrets</dt><dd>When a kubeconfig auth plugin fails, Kubeport shows its exit status only, never its arguments, environment or output.</dd></div>
+      </dl>
+      <p class="note">As with <code>kubectl port-forward</code>, a web page open in your browser can reach forwarded <code>localhost</code> ports through DNS rebinding. <a href="https://github.com/deki-lab/Kubeport#security">Read the security notes</a> to see how to guard a forwarded HTTP service.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="brand"><img src="assets/AppIcon.svg" width="28" height="28" alt="">Kubeport</span>
+    <nav>
+      <a href="https://github.com/deki-lab/Kubeport">GitHub</a>
+      <a href="https://github.com/deki-lab/Kubeport/issues">Report a bug</a>
+      <a href="https://www.buymeacoffee.com/lideke">Buy me a coffee</a>
+      <a href="https://github.com/deki-lab/Kubeport/blob/main/LICENSE">MIT license</a>
+    </nav>
+  </div>
+</footer>
+
+<p class="sr" id="copy-status" role="status"></p>
+
+<script>
+// Copy a command block. If the browser refuses, select the text so Cmd+C works.
+const copyStatus = document.getElementById("copy-status");
+document.querySelectorAll("button.copy").forEach((button) => {
+  const label = button.textContent;
+  button.addEventListener("click", async () => {
+    const block = document.getElementById(button.dataset.copy);
+    let message = "Copied";
+    try {
+      await navigator.clipboard.writeText(block.innerText);
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(block);
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      message = "Press ⌘C to copy";
+    }
+    button.textContent = message;
+    copyStatus.textContent = message;
+    setTimeout(() => { button.textContent = label; copyStatus.textContent = ""; }, 2500);
+  });
+});
+
+// The rollout. The markup ships with the end state, so it reads without JavaScript
+// and with reduced motion. Otherwise it resets, plays once when it scrolls into
+// view, and plays again on Replay.
+const lanes = [...document.querySelectorAll(".lane")].map((lane) => {
+  const el = (name) => lane.querySelector(`[data-el="${name}"]`);
+  return { kind: lane.dataset.lane, el };
+});
+const frame = (la, lb, pa, pb, ta, tb, status) => ({ la, lb, pa, pb, ta, tb, status });
+const START = frame("link up", "link up hidden", "pod ready", "pod starting hidden", "label", "label hidden",
+  "<strong>Connected</strong> to postgres-a.");
+const ROLLOUT = frame("link up", "link up hidden", "pod dying", "pod starting", "label", "label",
+  "Rollout: postgres-a is replaced by postgres-b.");
+const KUBECTL_ERR = "<strong>error: lost connection to pod.</strong> Run the command again.";
+const KUBEPORT_OK = "<strong>Connected</strong> to postgres-b on the same port. Nothing to restart.";
+const FRAMES = {
+  kubectl: [
+    START,
+    ROLLOUT,
+    frame("link down", "link up hidden", "pod dying", "pod starting", "label", "label", KUBECTL_ERR),
+    frame("link down", "link up hidden", "pod dying", "pod ready", "label", "label", KUBECTL_ERR),
+    frame("link down hidden", "link up hidden", "pod dying gone", "pod ready", "label hidden", "label", KUBECTL_ERR),
+  ],
+  kubeport: [
+    START,
+    ROLLOUT,
+    frame("link wait", "link up hidden", "pod dying", "pod starting", "label", "label",
+      "<strong>postgres-a is not Ready.</strong> Its open connections close. Waiting for a Ready pod."),
+    frame("link hidden", "link up draw", "pod dying", "pod ready", "label", "label", KUBEPORT_OK),
+    frame("link hidden", "link up draw", "pod dying gone", "pod ready", "label hidden", "label", KUBEPORT_OK),
+  ],
+};
+
+function render(index) {
+  for (const { kind, el } of lanes) {
+    const f = FRAMES[kind][index];
+    el("link-a").setAttribute("class", f.la);
+    el("link-b").setAttribute("class", f.lb);
+    el("pod-a").setAttribute("class", f.pa);
+    el("pod-b").setAttribute("class", f.pb);
+    el("label-a").setAttribute("class", f.ta);
+    el("label-b").setAttribute("class", f.tb);
+    el("status").innerHTML = f.status;
+  }
+}
+
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let timers = [];
+function play() {
+  timers.forEach(clearTimeout);
+  render(0);
+  timers = [1200, 2600, 4000, 5000].map((t, i) => setTimeout(() => render(i + 1), t));
+}
+
+if (!reduced) {
+  render(0);
+  document.getElementById("replay").addEventListener("click", play);
+  new IntersectionObserver((entries, observer) => {
+    if (entries.some((e) => e.isIntersecting)) {
+      play();
+      observer.disconnect();
+    }
+  }, { threshold: 0.4 }).observe(document.getElementById("lanes"));
+}
+</script>
+</body>
+</html>
