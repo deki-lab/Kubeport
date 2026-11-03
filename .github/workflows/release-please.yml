@@ -80,8 +80,9 @@ jobs:
 
   homebrew-tap:
     needs: [release-please, build-dmg, upload-dmg]
-    # Enabled once the repo is public: repo variable HOMEBREW_TAP_ENABLED=true
-    # and secret HOMEBREW_TAP_TOKEN (fine-grained PAT, contents:write on deki-lab/homebrew-tap).
+    # Enabled once the repo is public: repo variable HOMEBREW_TAP_ENABLED=true.
+    # Writes to deki-lab/homebrew-tap as the deki-lab GitHub App installed on that repo only
+    # (Contents: read and write): org variable HOMEBREW_TAP_CLIENT_ID, org secret HOMEBREW_TAP_APP_KEY.
     if: >-
       needs.release-please.outputs.release_created == 'true' &&
       needs.upload-dmg.result == 'success' &&
@@ -93,10 +94,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # A one-hour token, limited to the tap and to its contents.
+      - id: tap-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.HOMEBREW_TAP_CLIENT_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_KEY }}
+          owner: deki-lab
+          repositories: homebrew-tap
+          permission-contents: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: deki-lab/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          token: ${{ steps.tap-token.outputs.token }}
           path: tap
       - env:
           VERSION: ${{ needs.release-please.outputs.version }}
@@ -112,4 +122,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/kubeport.rb
           git commit -m "kubeport $VERSION"
+          # Other apps' releases write to the same tap: replay on top of theirs.
+          git pull --rebase --quiet
           git push
