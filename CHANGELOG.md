@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0](https://github.com/deki-lab/Kubeport/compare/v0.2.0...v0.3.0) (2026-11-03)
+
+
+### Features
+
+* app icon ([#21](https://github.com/deki-lab/Kubeport/issues/21)) ([2300c61](https://github.com/deki-lab/Kubeport/commit/2300c61428a7d9d245645daea86a74b0f265fbd4))
+* build a universal app for Apple silicon and Intel Macs ([#26](https://github.com/deki-lab/Kubeport/issues/26)) ([d9cda8f](https://github.com/deki-lab/Kubeport/commit/d9cda8f93358a45982b5d8b767cde932af6bccbf))
+* draw the app icon's machine and pod in the menu bar ([#29](https://github.com/deki-lab/Kubeport/issues/29)) ([e551229](https://github.com/deki-lab/Kubeport/commit/e551229d654a6daa88f70b75b775a7790ebc0e57))
+
+
+### Bug Fixes
+
+* apply the security audit and the last architecture recommendations ([#24](https://github.com/deki-lab/Kubeport/issues/24)) ([85b6ed9](https://github.com/deki-lab/Kubeport/commit/85b6ed93b052b02afdbe5b463c0387d7e5e5bac0))
+* serve a Forward's local port only to the user running Kubeport ([#25](https://github.com/deki-lab/Kubeport/issues/25)) ([6f726f2](https://github.com/deki-lab/Kubeport/commit/6f726f2af41a9bf3fb26b999329f9bf8dad5b754))
+
 ## [0.2.0](https://github.com/deki-lab/k8s_forwarder/compare/v0.1.0...v0.2.0) (2026-11-02)
 
 
