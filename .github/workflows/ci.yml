@@ -112,5 +112,9 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test --all
-      - run: ARCHS=x86_64 ./scripts/build-ffi.sh
+      # Dev profile: no LTO (minutes on Intel runners); the app job builds the release profile.
+      - run: ./scripts/build-ffi.sh
+        env:
+          ARCHS: x86_64
+          PROFILE: dev
       - run: swift test --package-path app
