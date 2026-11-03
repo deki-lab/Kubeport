@@ -5,7 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/deki-lab/k8s_forwarder)](https://github.com/deki-lab/k8s_forwarder/releases/latest)
 [![CI](https://github.com/deki-lab/k8s_forwarder/actions/workflows/ci.yml/badge.svg)](https://github.com/deki-lab/k8s_forwarder/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20Silicon-lightgrey)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon%20%26%20Intel-lightgrey)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/lideke)
 
 Kubernetes port-forwards from the macOS menu bar.
@@ -31,7 +31,7 @@ brew install --cask deki-lab/tap/kubeport
 
 Or download the `.dmg` from the [latest release](https://github.com/deki-lab/k8s_forwarder/releases/latest).
 
-Requirements: macOS 14 or later, Apple Silicon.
+Requirements: macOS 14 or later, on an Apple silicon or Intel Mac.
 
 The app is not signed with an Apple Developer ID yet, so macOS blocks it the first time:
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds dist/Kubeport.app, then dist/Kubeport-<version>-arm64.dmg.
+# Builds dist/Kubeport.app, then dist/Kubeport-<version>.dmg: one universal app,
+# for Apple silicon and Intel Macs.
 # Ad hoc signing only (no Apple Developer account for now).
 set -euo pipefail
 
@@ -7,15 +8,16 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$ROOT/version.txt")"
 DIST="$ROOT/dist"
 APP="$DIST/Kubeport.app"
-DMG="$DIST/Kubeport-$VERSION-arm64.dmg"
+DMG="$DIST/Kubeport-$VERSION.dmg"
 
 rm -rf "$DIST"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 python3 -I "$ROOT/scripts/check-l10n.py"
-"$ROOT/scripts/build-ffi.sh" >/dev/null
-swift build -c release --arch arm64 --package-path "$ROOT/app"
-BIN_DIR="$(swift build -c release --arch arm64 --package-path "$ROOT/app" --show-bin-path)"
+ARCHS="arm64 x86_64" "$ROOT/scripts/build-ffi.sh" >/dev/null
+SWIFT_BUILD=(swift build -c release --arch arm64 --arch x86_64 --package-path "$ROOT/app")
+"${SWIFT_BUILD[@]}"
+BIN_DIR="$("${SWIFT_BUILD[@]}" --show-bin-path)"
 
 cp "$BIN_DIR/Kubeport" "$APP/Contents/MacOS/Kubeport"
 cp "$ROOT/app/Info.plist" "$APP/Contents/Info.plist"

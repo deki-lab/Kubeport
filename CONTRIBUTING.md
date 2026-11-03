@@ -19,13 +19,13 @@ Requirements: Rust (the version in `rust-toolchain.toml`, installed by rustup) a
 
 ```sh
 cargo test --all                          # Rust core and FFI bridge
-./scripts/build-app.sh                    # dist/Kubeport.app + dist/Kubeport-<version>-arm64.dmg
+./scripts/build-app.sh                    # dist/Kubeport.app + dist/Kubeport-<version>.dmg (arm64 + x86_64)
 swift test --package-path app             # app logic without SwiftUI (after build-app.sh)
 python3 scripts/check-l10n.py             # translations: missing or unused keys, placeholders
 ./scripts/measure-footprint.sh            # memory of the running app (budget: 35 MB)
 ```
 
-`build-app.sh` runs `scripts/build-ffi.sh`, which builds the Rust core into `app/KubeportFFI.xcframework` and generates the Swift bindings. Open `app/Package.swift` in Xcode to work on the UI.
+`build-app.sh` runs `scripts/build-ffi.sh`, which builds the Rust core into `app/KubeportFFI.xcframework` and generates the Swift bindings. Run alone, `build-ffi.sh` builds for this Mac's architecture only: set `ARCHS="arm64 x86_64"` for both. Open `app/Package.swift` in Xcode to work on the UI.
 
 ### Tests against a cluster
 
