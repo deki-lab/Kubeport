@@ -64,6 +64,10 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+      # Compiled dependencies; saved from main only, restored everywhere.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all
@@ -79,7 +83,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
+      # Compiled dependencies; saved from main only, restored everywhere.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # x86_64 is built and tested natively by app-intel; the release builds both.
       - run: ./scripts/build-app.sh
+        env:
+          ARCHS: arm64
       - run: swift test --package-path app
 
   # The release DMG is universal: run the core and the app tests natively on Intel,
@@ -95,6 +106,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
+      # Compiled dependencies; saved from main only, restored everywhere.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test --all
       - run: ARCHS=x86_64 ./scripts/build-ffi.sh
       - run: swift test --package-path app
