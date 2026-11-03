@@ -13,5 +13,8 @@ cask "kubeport" do
 
   uninstall quit: "fr.deki-lab.kubeport"
 
-  zap trash: "~/Library/Application Support/k8s_forwarder"
+  zap trash: [
+    "~/Library/Application Support/Kubeport",
+    "~/Library/Application Support/k8s_forwarder",
+  ]
 end

@@ -13,7 +13,7 @@ use kubeport_core::{Config, Notice, Session, Target};
     about = "Kubernetes port-forwards (development CLI)"
 )]
 struct Cli {
-    /// Config file (default: ~/Library/Application Support/k8s_forwarder/config.toml)
+    /// Config file (default: ~/Library/Application Support/Kubeport/config.toml)
     #[arg(long, global = true)]
     config: Option<PathBuf>,
     /// Kubeconfig to use (default: KUBECONFIG, then ~/.kube/config)

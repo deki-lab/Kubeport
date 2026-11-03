@@ -69,7 +69,7 @@ Forwards that are on when you quit come back on at next launch. They listen on t
 
 ### Configuration file
 
-Forwards are stored in `~/Library/Application Support/k8s_forwarder/config.toml`. You can edit it by hand, then use **Reload Config** in Settings:
+Forwards are stored in `~/Library/Application Support/Kubeport/config.toml`. A config from an earlier version, in `k8s_forwarder/`, is moved there at launch. You can edit it by hand, then use **Reload Config** in Settings:
 
 ```toml
 idle_timeout = 60              # optional: default idle timeout in minutes
