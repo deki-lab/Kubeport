@@ -11,11 +11,11 @@ XCF="$ROOT/app/KubeportFFI.xcframework"
 SWIFT_OUT="$ROOT/app/Sources/Kubeport/Generated"
 
 cd "$ROOT"
-cargo build --release -p kubeport-ffi
+cargo build --release --locked -p kubeport-ffi
 
 rm -rf "$GEN" "$XCF" "$SWIFT_OUT"
 mkdir -p "$GEN/include" "$SWIFT_OUT"
-cargo run --release -q -p kubeport-ffi --bin uniffi-bindgen -- \
+cargo run --release --locked -q -p kubeport-ffi --bin uniffi-bindgen -- \
   target/release/libkubeport_ffi.dylib "$GEN" \
   --swift-sources --headers --modulemap \
   --module-name kubeport_ffiFFI --modulemap-filename module.modulemap

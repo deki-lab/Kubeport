@@ -126,7 +126,9 @@ fn print_notice(notice: &Notice) {
             println!("{name:<24} deactivated: no connection for {minutes} min")
         }
         Notice::UnknownForward { name } => println!("no Forward named {name:?}"),
-        Notice::ConfigNotReloaded { detail } => println!("config not reloaded: {detail}"),
+        Notice::ConfigNotReloaded { detail } => {
+            println!("config not reloaded: {}", printable(detail))
+        }
     }
 }
 
@@ -135,7 +137,32 @@ fn print_changes(before: &kubeport_core::Statuses, after: &kubeport_core::Status
         if before.get(name) != Some(status)
             && let Some(real) = &status.real
         {
-            println!("{name:<24} {real}");
+            println!("{name:<24} {}", printable(&real.to_string()));
         }
+    }
+}
+
+/// Cluster text with control characters escaped: an API message cannot move the
+/// cursor or rewrite earlier lines of the terminal.
+fn printable(text: &str) -> String {
+    text.chars()
+        .flat_map(|c| {
+            if c.is_control() {
+                c.escape_default().collect::<Vec<_>>()
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn printable_escapes_control_characters() {
+        assert_eq!(
+            super::printable("pod \u{1b}[2Kgone\r\nok"),
+            "pod \\u{1b}[2Kgone\\r\\nok"
+        );
     }
 }

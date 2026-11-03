@@ -49,7 +49,7 @@ Click the Kubeport icon in the menu bar.
 - The **Kubeport** switch at the top turns every Forward off, and brings the same ones back.
 - **Kubeport Settings…**: open at login, default idle timeout, kubeconfig file, config file, quit.
 
-Forwards that are on when you quit come back on at next launch. They listen on `127.0.0.1` only.
+Forwards that are on when you quit come back on at next launch. They listen on the loopback address only (`127.0.0.1`, and `::1` when the Mac has IPv6).
 
 ### Configuration file
 
@@ -69,6 +69,17 @@ idle_timeout = "never"         # optional: minutes, or "never"
 ```
 
 Editing from the app rewrites this file, so comments you add by hand are not kept.
+
+## Security
+
+Kubeport opens the same kind of tunnel as `kubectl port-forward`, with the same limits:
+
+- **Other accounts on the Mac.** The local port accepts any process on this Mac, under any user account, and reaches the pod with your Kubernetes identity. macOS cannot tell which account opened a TCP connection, so Kubeport cannot filter by user. On a Mac shared with other accounts, forward only services that ask for their own credentials. An Active Forward keeps its local port from activation until you turn it off, even while it reconnects or is in Error, so no other process can take the port in the meantime.
+- **Web pages.** A page open in your browser can reach `localhost` ports through DNS rebinding. A forwarded HTTP service should check the `Host` header and require authentication, as it would behind `kubectl port-forward`.
+- **Idle timeout.** A Forward you no longer use stays open until you turn it off. Set a default idle timeout in Settings to close forgotten ones.
+- **Auth plugin errors.** When a kubeconfig `exec` plugin fails, Kubeport shows its exit status only, never its arguments, environment or output, which can hold secrets.
+
+Report a vulnerability privately through [GitHub security advisories](https://github.com/deki-lab/k8s_forwarder/security/advisories/new), not in a public issue.
 
 ## Support
 

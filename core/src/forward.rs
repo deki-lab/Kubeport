@@ -1,8 +1,9 @@
-//! Running an Active Forward: local listener, Resolved pod tracking, one stream per connection.
+//! Running an Active Forward: local port, Resolved pod tracking, one stream per connection.
 //! It only talks to the cluster through the `Cluster` seam.
 
 use std::collections::BTreeMap;
-use std::net::Ipv4Addr;
+use std::io::ErrorKind;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -21,6 +22,60 @@ use crate::state::{RealState, Reason};
 
 pub(crate) type Report = Arc<dyn Fn(RealState) + Send + Sync>;
 
+/// Open connections per Forward; beyond this, new connections are closed at once.
+const MAX_CONNECTIONS: usize = 256;
+
+/// Pause after a failed `accept` (out of file descriptors): no busy loop.
+const ACCEPT_BACKOFF: Duration = Duration::from_millis(100);
+
+/// The local port of an Active Forward, on 127.0.0.1 and, when the Mac has IPv6, on [::1].
+///
+/// The Manager binds it on activation and keeps it until the Forward becomes Inactive:
+/// reconnections and Errors never release it, so no other local process can take it
+/// while the user's clients still point at it. Binding [::1] too means `localhost`
+/// reaches the Forward whichever address a client tries first.
+pub(crate) struct LocalPort {
+    v4: TcpListener,
+    v6: Option<TcpListener>,
+}
+
+impl LocalPort {
+    pub(crate) async fn bind(port: u16) -> Result<Self, Reason> {
+        let v4 = TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+            .await
+            .map_err(|e| port_error(port, &e))?;
+        let v6 = match TcpListener::bind((Ipv6Addr::LOCALHOST, port)).await {
+            Ok(l) => Some(l),
+            Err(e) if e.kind() == ErrorKind::AddrInUse => return Err(Reason::PortInUse { port }),
+            // No IPv6 loopback on this Mac: 127.0.0.1 alone.
+            Err(_) => None,
+        };
+        Ok(Self { v4, v6 })
+    }
+
+    async fn accept(&self) -> std::io::Result<TcpStream> {
+        let accepted = match &self.v6 {
+            None => self.v4.accept().await,
+            Some(v6) => tokio::select! {
+                r = self.v4.accept() => r,
+                r = v6.accept() => r,
+            },
+        };
+        accepted.map(|(socket, _)| socket)
+    }
+}
+
+fn port_error(port: u16, e: &std::io::Error) -> Reason {
+    if e.kind() == ErrorKind::AddrInUse {
+        Reason::PortInUse { port }
+    } else {
+        Reason::PortUnavailable {
+            port,
+            detail: e.to_string(),
+        }
+    }
+}
+
 /// Idle timeout of an Active Forward: goes Inactive after `timeout` with no open connection.
 pub(crate) struct Idle {
     pub timeout: Option<Duration>,
@@ -37,10 +92,12 @@ impl Idle {
     }
 }
 
-/// Keeps an Active Forward running until `cancel`, or until an Error.
+/// Keeps an Active Forward running until `cancel`. After an Error it keeps the local
+/// port and closes every new connection, until the user acts.
 pub(crate) async fn run<C: Cluster>(
     forward: Forward,
     cluster: C,
+    port: Arc<LocalPort>,
     report: Report,
     idle: Idle,
     cancel: CancellationToken,
@@ -48,27 +105,39 @@ pub(crate) async fn run<C: Cluster>(
     tokio::select! {
         biased;
         () = cancel.cancelled() => {}
-        () = serve(&forward, cluster, &report, &idle) => {}
+        () = async {
+            serve(&forward, cluster, &port, &report, &idle).await;
+            refuse(&port).await;
+        } => {}
     }
 }
 
-async fn serve<C: Cluster>(forward: &Forward, cluster: C, report: &Report, idle: &Idle) {
-    let listener = match TcpListener::bind((Ipv4Addr::LOCALHOST, forward.local_port)).await {
-        Ok(l) => l,
-        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
-            return report(RealState::Error(Reason::PortInUse {
-                port: forward.local_port,
-            }));
-        }
-        Err(e) => {
-            return report(RealState::Error(Reason::PortUnavailable {
-                port: forward.local_port,
-                detail: e.to_string(),
-            }));
-        }
-    };
+/// Holds the local port of a Forward in Error until `cancel`, closing every connection.
+pub(crate) async fn hold(port: Arc<LocalPort>, cancel: CancellationToken) {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => {}
+        () = refuse(&port) => {}
+    }
+}
 
-    let (filter, port, missing) = match &forward.target {
+async fn refuse(port: &LocalPort) {
+    loop {
+        match port.accept().await {
+            Ok(socket) => drop(socket),
+            Err(_) => tokio::time::sleep(ACCEPT_BACKOFF).await,
+        }
+    }
+}
+
+async fn serve<C: Cluster>(
+    forward: &Forward,
+    cluster: C,
+    port: &LocalPort,
+    report: &Report,
+    idle: &Idle,
+) {
+    let (filter, pod_port, missing) = match &forward.target {
         Target::Service(name) => {
             let Some(backend) = service_with_retry(&cluster, name, forward, report).await else {
                 return;
@@ -92,8 +161,8 @@ async fn serve<C: Cluster>(forward: &Forward, cluster: C, report: &Report, idle:
     let (fatal_tx, mut fatal_rx) = mpsc::channel::<Reason>(1);
 
     tokio::select! {
-        () = track_pods(pods, port, missing, resolved_tx, report) => {}
-        () = accept_loop(listener, &cluster, &forward.namespace, resolved_rx, fatal_tx, idle) => {}
+        () = track_pods(pods, pod_port, missing, resolved_tx, report) => {}
+        () = accept_loop(port, &cluster, &forward.namespace, resolved_rx, fatal_tx, idle) => {}
         Some(reason) = fatal_rx.recv() => report(RealState::Error(reason)),
     }
 }
@@ -184,7 +253,7 @@ fn pod_name(pod: &Pod) -> String {
 
 /// Accepts local connections; each opens its own stream to the current Resolved pod.
 async fn accept_loop<C: Cluster>(
-    listener: TcpListener,
+    port: &LocalPort,
     cluster: &C,
     namespace: &str,
     resolved: watch::Receiver<Option<Resolved>>,
@@ -203,8 +272,15 @@ async fn accept_loop<C: Cluster>(
                 (idle.expired)();
                 return;
             }
-            accepted = listener.accept() => {
-                let Ok((socket, _)) = accepted else { continue };
+            accepted = port.accept() => {
+                let Ok(socket) = accepted else {
+                    tokio::time::sleep(ACCEPT_BACKOFF).await;
+                    continue;
+                };
+                if connections.len() >= MAX_CONNECTIONS {
+                    tracing::warn!("{MAX_CONNECTIONS} open connections: refusing a new one");
+                    continue;
+                }
                 let Some(target) = resolved.borrow().clone() else {
                     // No Ready pod: refuse the connection rather than keep it waiting.
                     continue;

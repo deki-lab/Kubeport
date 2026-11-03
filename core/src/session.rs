@@ -334,7 +334,8 @@ mod tests {
 
     fn forward(name: &str, port: u16) -> Forward {
         Config::parse(&format!(
-            "[[forward]]\nname = \"{name}\"\ncontext = \"c\"\nnamespace = \"n\"\nservice = \"s\"\nremote_port = 80\nlocal_port = {port}\n"
+            "[[forward]]\nname = \"{name}\"\ncontext = \"c\"\nnamespace = \"n\"\nservice = \"s\"\nremote_port = 80\nlocal_port = {}\n",
+            crate::test_port(port)
         ))
         .unwrap()
         .forwards
