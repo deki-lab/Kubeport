@@ -2,8 +2,8 @@
 
 # Kubeport
 
-[![Release](https://img.shields.io/github/v/release/deki-lab/k8s_forwarder)](https://github.com/deki-lab/k8s_forwarder/releases/latest)
-[![CI](https://github.com/deki-lab/k8s_forwarder/actions/workflows/ci.yml/badge.svg)](https://github.com/deki-lab/k8s_forwarder/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/deki-lab/Kubeport)](https://github.com/deki-lab/Kubeport/releases/latest)
+[![CI](https://github.com/deki-lab/Kubeport/actions/workflows/ci.yml/badge.svg)](https://github.com/deki-lab/Kubeport/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon%20%26%20Intel-lightgrey)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/lideke)
@@ -29,7 +29,7 @@ Set up a Forward once, turn it on with a switch, and forget about it: Kubeport f
 brew install --cask deki-lab/tap/kubeport
 ```
 
-Or download the `.dmg` from the [latest release](https://github.com/deki-lab/k8s_forwarder/releases/latest).
+Or download the `.dmg` from the [latest release](https://github.com/deki-lab/Kubeport/releases/latest).
 
 Requirements: macOS 14 or later, on an Apple silicon or Intel Mac.
 
@@ -79,13 +79,13 @@ Kubeport opens the same kind of tunnel as `kubectl port-forward`, with the same 
 - **Idle timeout.** A Forward you no longer use stays open until you turn it off. Set a default idle timeout in Settings to close forgotten ones.
 - **Auth plugin errors.** When a kubeconfig `exec` plugin fails, Kubeport shows its exit status only, never its arguments, environment or output, which can hold secrets.
 
-Report a vulnerability privately through [GitHub security advisories](https://github.com/deki-lab/k8s_forwarder/security/advisories/new), not in a public issue.
+Report a vulnerability privately through [GitHub security advisories](https://github.com/deki-lab/Kubeport/security/advisories/new), not in a public issue.
 
 ## Support
 
 If Kubeport saves you a few `kubectl port-forward` restarts, you can [buy me a coffee](https://www.buymeacoffee.com/lideke).
 
-Bugs and ideas: [open an issue](https://github.com/deki-lab/k8s_forwarder/issues).
+Bugs and ideas: [open an issue](https://github.com/deki-lab/Kubeport/issues).
 
 ## Contributing
 
