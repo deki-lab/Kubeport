@@ -6,6 +6,7 @@ publish.workspace = true
 
 [dependencies]
 kube = { version = "5.0.0", default-features = false, features = ["client", "runtime", "ws", "rustls-tls", "ring"] }
+libc = "0.2.191"
 k8s-openapi = { version = "0.29.0", default-features = false, features = ["std", "earliest"] }
 tokio = { version = "1.54.1", default-features = false, features = ["rt", "net", "io-util", "sync", "time", "macros"] }
 tokio-util = { version = "0.7.20", default-features = false }

@@ -7,6 +7,7 @@ pub mod cluster;
 pub mod config;
 mod forward;
 pub mod manager;
+mod peer;
 pub mod resolve;
 pub mod session;
 pub mod shell_env;
