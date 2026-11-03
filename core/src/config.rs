@@ -72,7 +72,7 @@ pub struct Config {
     /// Setting: forced kubeconfig. Absent: the login shell's, then `~/.kube/config`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kubeconfig: Option<PathBuf>,
-    /// Setting: default Idle timeout, in minutes. Absent: never.
+    /// Setting: default Idle timeout, in minutes. Absent: never (a new config sets 60).
     #[serde(
         default,
         rename = "idle_timeout",
@@ -122,10 +122,11 @@ impl std::fmt::Display for Field {
     }
 }
 
-/// Content of a config file created on first launch.
+/// Content of a config file created on first launch. New installs close a Forward after
+/// an hour without any connection: a forgotten Forward does not keep its port open.
 const TEMPLATE: &str = r#"# Kubeport Forwards. One [[forward]] block per port-forward.
 #
-# idle_timeout = 60              # optional: default Idle timeout in minutes
+idle_timeout = 60                # default Idle timeout in minutes; remove it for "never"
 #
 # [[forward]]
 # name = "postgres-staging"      # unique name
@@ -600,6 +601,22 @@ remote_port = 80
         assert_eq!(config_path_in(&home), home.join(DIR).join("config.toml"));
         assert!(!home.join(LEGACY_DIR).exists());
         std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn a_new_config_closes_idle_forwards_after_an_hour() {
+        let dir = std::env::temp_dir().join(format!("kubeport-new-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("config.toml");
+        let config = Config::load_or_create(&path).unwrap();
+        assert_eq!(config.idle_timeout_minutes, Some(60));
+        // An existing config without the setting keeps "never".
+        std::fs::write(&path, "").unwrap();
+        assert_eq!(
+            Config::load_or_create(&path).unwrap().idle_timeout_minutes,
+            None
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

@@ -4,9 +4,11 @@
 //! adapters (the UniFFI bridge, the CLI) only translate calls and notices.
 //!
 //! `state.toml` sits next to the config and holds the Active Forwards (restored on the
-//! next launch) and the set the master switch will bring back. The config stays
-//! hand-editable without being rewritten on every click.
+//! next launch) with their definitions, and the set the master switch will bring back.
+//! The config stays hand-editable without being rewritten on every click. A Forward
+//! edited by hand while Kubeport was closed is not restored: it may now point elsewhere.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +16,7 @@ use tokio::sync::{mpsc, watch};
 
 use crate::cluster::Connector;
 use crate::cluster::kube::{KubeConnector, KubeEnv};
-use crate::config::{Config, ConfigError, Forward, minutes, write_atomic};
+use crate::config::{Config, ConfigError, Forward, Target, minutes, write_atomic};
 use crate::manager::{Manager, ManagerError, Statuses};
 use crate::state::Reason;
 
@@ -46,6 +48,22 @@ struct SavedState {
     /// Forwards the master switch turns back on.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     remembered: Vec<String>,
+    /// Definition of each Active Forward when saved (see `definition`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    definitions: BTreeMap<String, String>,
+}
+
+/// What a Forward connects, as text: restoring needs it unchanged. The Idle timeout is
+/// left out, it does not change where the Forward goes.
+fn definition(forward: &Forward) -> String {
+    let target = match &forward.target {
+        Target::Service(name) => format!("service/{name}"),
+        Target::Pod(name) => format!("pod/{name}"),
+    };
+    format!(
+        "{} {} {target} {} {}",
+        forward.context, forward.namespace, forward.remote_port, forward.local_port
+    )
 }
 
 pub struct Session<C: Connector = KubeConnector> {
@@ -98,6 +116,14 @@ impl<C: Connector> Session<C> {
         let saved = load_state(path);
         self.remembered = self.known(saved.remembered.clone());
         for name in self.known(saved.active.clone()) {
+            // A state.toml from an earlier version has no definitions: restored as before.
+            let current = self.config().get(&name).map(definition);
+            if let Some(stored) = saved.definitions.get(&name)
+                && current.as_ref() != Some(stored)
+            {
+                tracing::warn!("{name}: edited while Kubeport was closed, not restored");
+                continue;
+            }
             let _ = self.manager.activate(&name).await;
         }
         self.saved = saved;
@@ -292,9 +318,15 @@ impl<C: Connector> Session<C> {
         let Some(path) = self.state_path.clone() else {
             return;
         };
+        let active = self.manager.active();
+        let definitions = active
+            .iter()
+            .filter_map(|name| Some((name.clone(), definition(self.config().get(name)?))))
+            .collect();
         let state = SavedState {
-            active: self.manager.active(),
+            active,
             remembered: self.remembered.clone(),
+            definitions,
         };
         if state == self.saved {
             return;
@@ -391,6 +423,43 @@ mod tests {
         let mut s = session(&d, &[("a", 1), ("b", 2)]).await;
         s.activate("a").await;
         drop(s);
+        let s = reopen(&d).await;
+        assert_eq!(active(&s), ["a"]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_forward_edited_while_kubeport_was_closed_is_not_restored() {
+        let d = dir("edited-offline");
+        let mut s = session(&d, &[("a", 1), ("b", 2)]).await;
+        s.activate("a").await;
+        s.activate("b").await;
+        drop(s);
+        // Same name, another cluster: edited by hand while the app was closed.
+        let path = d.0.join("config.toml");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let edited = text.replacen("context = \"c\"", "context = \"elsewhere\"", 1);
+        assert_ne!(text, edited);
+        std::fs::write(&path, edited).unwrap();
+        let s = reopen(&d).await;
+        assert_eq!(active(&s), ["b"]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_forward_edited_in_the_app_is_still_restored() {
+        let d = dir("edited-in-app");
+        let mut s = session(&d, &[("a", 1)]).await;
+        s.activate("a").await;
+        s.save_forward(Some("a"), forward("a", 3)).await.unwrap();
+        drop(s);
+        let s = reopen(&d).await;
+        assert_eq!(active(&s), ["a"]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_state_file_from_an_earlier_version_is_still_restored() {
+        let d = dir("old-state");
+        drop(session(&d, &[("a", 1)]).await);
+        std::fs::write(d.0.join("state.toml"), "active = [\"a\"]\n").unwrap();
         let s = reopen(&d).await;
         assert_eq!(active(&s), ["a"]);
     }
