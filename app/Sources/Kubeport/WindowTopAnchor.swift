@@ -33,15 +33,19 @@ struct WindowTopAnchor: NSViewRepresentable {
             guard let window else { return }
             let center = NotificationCenter.default
             // Opening the panel: its position is right under the menu bar.
-            observers.append(center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.top = window.frame.maxY }
-            })
-            observers.append(center.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    guard let top = self?.top, abs(window.frame.maxY - top) > 0.5 else { return }
-                    window.setFrameOrigin(NSPoint(x: window.frame.minX, y: top - window.frame.height))
-                }
-            })
+            observers.append(
+                center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) {
+                    [weak self] _ in
+                    MainActor.assumeIsolated { self?.top = window.frame.maxY }
+                })
+            observers.append(
+                center.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) {
+                    [weak self] _ in
+                    MainActor.assumeIsolated {
+                        guard let top = self?.top, abs(window.frame.maxY - top) > 0.5 else { return }
+                        window.setFrameOrigin(NSPoint(x: window.frame.minX, y: top - window.frame.height))
+                    }
+                })
             if window.isKeyWindow { top = window.frame.maxY }
         }
 

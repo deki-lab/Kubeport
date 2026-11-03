@@ -1,10 +1,13 @@
 import XCTest
+
 @testable import Kubeport
 
 final class FormStateTests: XCTestCase {
-    private let web = TargetOption(kind: .service, name: "web", ports: [
-        PortOption(port: 8080, name: "http"), PortOption(port: 9090, name: "metrics"),
-    ])
+    private let web = TargetOption(
+        kind: .service, name: "web",
+        ports: [
+            PortOption(port: 8080, name: "http"), PortOption(port: 9090, name: "metrics"),
+        ])
     private let db = TargetOption(kind: .service, name: "db", ports: [PortOption(port: 5432, name: nil)])
     private let pod = TargetOption(kind: .pod, name: "db-0", ports: [PortOption(port: 5432, name: nil)])
 
@@ -90,7 +93,8 @@ final class FormStateTests: XCTestCase {
     }
 
     func testAHandWrittenIdleTimeoutIsOffered() {
-        XCTAssertEqual(FormState(source: source(idle: .minutes(minutes: 30)), name: "pg").idleChoices, [15, 30, 60, 240])
+        XCTAssertEqual(
+            FormState(source: source(idle: .minutes(minutes: 30)), name: "pg").idleChoices, [15, 30, 60, 240])
         XCTAssertEqual(FormState(source: source(idle: .minutes(minutes: 60)), name: "pg").idleChoices, [15, 60, 240])
         XCTAssertEqual(FormState(source: source(idle: .never), name: "pg").idleChoices, [15, 60, 240])
     }

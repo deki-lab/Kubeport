@@ -81,16 +81,20 @@ struct ForwardForm: View {
             InsetDivider().padding(.top, 4)
             SectionTitle(text: L("form.section.local"))
             SettingRow(label: L("form.localPort")) {
-                field(L("form.localPort"), text: Binding(
-                    get: { form.localPort },
-                    set: { form.editLocalPort($0) }
-                ), width: 80)
+                field(
+                    L("form.localPort"),
+                    text: Binding(
+                        get: { form.localPort },
+                        set: { form.editLocalPort($0) }
+                    ), width: 80)
             }
             SettingRow(label: L("form.name")) {
-                field(L("form.name"), text: Binding(
-                    get: { form.name },
-                    set: { form.editName($0) }
-                ))
+                field(
+                    L("form.name"),
+                    text: Binding(
+                        get: { form.name },
+                        set: { form.editName($0) }
+                    ))
             }
             SettingRow(label: L("form.idleTimeout")) {
                 Picker(L("form.idleTimeout"), selection: $form.idleTimeout) {
@@ -251,8 +255,8 @@ struct ForwardForm: View {
     }
 }
 
-private extension FormMode {
-    var source: ForwardView? {
+extension FormMode {
+    fileprivate var source: ForwardView? {
         switch self {
         case .create: nil
         case .edit(let f), .duplicate(let f): f
