@@ -10,10 +10,11 @@ permissions: {}
 
 jobs:
   # Writes with a token of the deki-lab-release-please GitHub App (Contents, Pull requests
-  # and Issues: read and write), shared by the deki-lab repos that use release-please:
-  # org variable RELEASE_PLEASE_CLIENT_ID, org secret RELEASE_PLEASE_APP_KEY. The token
-  # covers this repository only. A PR opened with the GITHUB_TOKEN starts no workflow,
-  # so the release PR would have no checks.
+  # and Issues: read and write): org variable RELEASE_PLEASE_CLIENT_ID, org secret
+  # RELEASE_PLEASE_APP_KEY. The token minted here covers this repository only, but the
+  # key can mint one for every repo the App is installed on: share the secret only with
+  # repos that run release-please and protect their main branch. A PR opened with the
+  # GITHUB_TOKEN starts no workflow, so the release PR would have no checks.
   release-please:
     runs-on: ubuntu-latest
     permissions: {}
@@ -27,6 +28,8 @@ jobs:
         with:
           client-id: ${{ vars.RELEASE_PLEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-pull-requests: write
           permission-issues: write
