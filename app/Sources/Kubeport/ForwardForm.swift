@@ -14,21 +14,11 @@ struct ForwardForm: View {
     let mode: FormMode
     let close: () -> Void
 
-    @State private var name = ""
-    @State private var nameEdited = false
-    @State private var context = ""
-    @State private var namespace = ""
-    @State private var kind: TargetKind = .service
-    @State private var targetName = ""
-    @State private var remotePort = ""
-    @State private var localPort = ""
-    @State private var localEdited = false
-    @State private var idleTimeout: IdleTimeoutView = .inherit
+    @State private var form = FormState()
     @State private var defaultIdle: UInt32?
 
     @State private var contexts: [String] = []
     @State private var namespaces: [String] = []
-    @State private var targets: [TargetOption] = []
     @State private var namespacesError: String?
     @State private var targetsError: String?
     @State private var error: String?
@@ -42,17 +32,17 @@ struct ForwardForm: View {
 
             SectionTitle(text: L("form.section.target"))
             SettingRow(label: L("form.context")) {
-                menuPicker(L("form.context"), selection: $context, values: contexts)
+                menuPicker(L("form.context"), selection: $form.context, values: contexts)
             }
             SettingRow(label: L("form.namespace")) {
                 if namespacesError == nil, !namespaces.isEmpty {
-                    menuPicker(L("form.namespace"), selection: $namespace, values: namespaces)
+                    menuPicker(L("form.namespace"), selection: $form.namespace, values: namespaces)
                 } else {
-                    field(L("form.namespace"), text: $namespace)
+                    field(L("form.namespace"), text: $form.namespace)
                 }
             }
             SettingRow(label: L("form.type")) {
-                Picker(L("form.type"), selection: $kind) {
+                Picker(L("form.type"), selection: $form.kind) {
                     Text(L("form.service")).tag(TargetKind.service)
                     Text(L("form.pod")).tag(TargetKind.pod)
                 }
@@ -62,16 +52,16 @@ struct ForwardForm: View {
                 .fixedSize()
             }
             SettingRow(label: targetLabel) {
-                if !filteredTargets.isEmpty {
-                    menuPicker(targetLabel, selection: $targetName, values: filteredTargets.map(\.name))
+                if !form.filteredTargets.isEmpty {
+                    menuPicker(targetLabel, selection: $form.targetName, values: form.filteredTargets.map(\.name))
                 } else {
-                    field(targetLabel, text: $targetName)
+                    field(targetLabel, text: $form.targetName)
                 }
             }
             SettingRow(label: L("form.remotePort")) {
-                if !portOptions.isEmpty {
-                    Picker(L("form.remotePort"), selection: $remotePort) {
-                        ForEach(portOptions, id: \.port) { port in
+                if !form.portOptions.isEmpty {
+                    Picker(L("form.remotePort"), selection: $form.remotePort) {
+                        ForEach(form.portOptions, id: \.port) { port in
                             Text(port.name.map { "\(port.port) (\($0))" } ?? "\(port.port)")
                                 .tag(String(port.port))
                         }
@@ -81,7 +71,7 @@ struct ForwardForm: View {
                     .menuStyle(.borderlessButton)
                     .fixedSize()
                 } else {
-                    field(L("form.remotePort"), text: $remotePort, width: 80)
+                    field(L("form.remotePort"), text: $form.remotePort, width: 80)
                 }
             }
             if let hint = namespacesError ?? targetsError {
@@ -92,21 +82,21 @@ struct ForwardForm: View {
             SectionTitle(text: L("form.section.local"))
             SettingRow(label: L("form.localPort")) {
                 field(L("form.localPort"), text: Binding(
-                    get: { localPort },
-                    set: { localPort = $0; localEdited = true }
+                    get: { form.localPort },
+                    set: { form.editLocalPort($0) }
                 ), width: 80)
             }
             SettingRow(label: L("form.name")) {
                 field(L("form.name"), text: Binding(
-                    get: { name },
-                    set: { name = $0; nameEdited = true }
+                    get: { form.name },
+                    set: { form.editName($0) }
                 ))
             }
             SettingRow(label: L("form.idleTimeout")) {
-                Picker(L("form.idleTimeout"), selection: $idleTimeout) {
+                Picker(L("form.idleTimeout"), selection: $form.idleTimeout) {
                     Text(L("idle.inherit", idleDefaultLabel(defaultIdle))).tag(IdleTimeoutView.inherit)
                     Text(L("idle.never")).tag(IdleTimeoutView.never)
-                    ForEach(idleChoices, id: \.self) { minutes in
+                    ForEach(form.idleChoices, id: \.self) { minutes in
                         Text(idleDuration(minutes)).tag(IdleTimeoutView.minutes(minutes: minutes))
                     }
                 }
@@ -145,7 +135,7 @@ struct ForwardForm: View {
                 Button(L("form.cancel"), action: close)
                 Button(L("form.save"), action: save)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(saving || !isComplete)
+                    .disabled(saving || form.input == nil)
             }
             .controlSize(.small)
             .padding(.horizontal, 10)
@@ -155,11 +145,11 @@ struct ForwardForm: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 6)
         .task { await start() }
-        .onChange(of: context) { _, value in Task { await loadNamespaces(value) } }
-        .onChange(of: namespace) { _, value in Task { await loadTargets(context, value) } }
-        .onChange(of: kind) { _, _ in pickDefaultTarget() }
-        .onChange(of: targetName) { _, _ in pickDefaultPort(); autofill() }
-        .onChange(of: remotePort) { _, _ in autofill() }
+        .onChange(of: form.context) { _, value in Task { await loadNamespaces(value) } }
+        .onChange(of: form.namespace) { _, value in Task { await loadTargets(form.context, value) } }
+        .onChange(of: form.kind) { _, _ in form.kindChanged() }
+        .onChange(of: form.targetName) { _, _ in form.targetChanged() }
+        .onChange(of: form.remotePort) { _, _ in form.remotePortChanged() }
     }
 
     /// Right-aligned menu without a frame, like the Wi-Fi menu controls.
@@ -190,39 +180,19 @@ struct ForwardForm: View {
         }
     }
 
-    private var targetLabel: String { kind == .service ? L("form.service") : L("form.pod") }
-
-    private var filteredTargets: [TargetOption] { targets.filter { $0.kind == kind } }
-
-    private var portOptions: [PortOption] {
-        filteredTargets.first { $0.name == targetName }?.ports ?? []
-    }
-
-    private var isComplete: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && !context.isEmpty
-            && !namespace.isEmpty && !targetName.isEmpty
-            && UInt16(remotePort) != nil && UInt16(localPort) != nil
-    }
+    private var targetLabel: String { form.kind == .service ? L("form.service") : L("form.pod") }
 
     // MARK: Loading
 
     private func start() async {
         if let source = mode.source {
-            name = mode == .edit(source) ? source.name : L("form.copyName", source.name)
-            nameEdited = true
-            context = source.context
-            namespace = source.namespace
-            kind = source.targetKind
-            targetName = source.targetName
-            remotePort = String(source.remotePort)
-            localPort = String(source.localPort)
-            localEdited = true
-            idleTimeout = source.idleTimeout
+            let name = mode == .edit(source) ? source.name : L("form.copyName", source.name)
+            form = FormState(source: source, name: name)
         }
         defaultIdle = try? await model.defaultIdleTimeout()
         do {
             contexts = try await model.contexts()
-            if context.isEmpty { context = contexts.first ?? "" }
+            if form.context.isEmpty { form.context = contexts.first ?? "" }
         } catch {
             self.error = describe(error)
         }
@@ -233,9 +203,7 @@ struct ForwardForm: View {
         do {
             namespaces = try await model.namespaces(context: context)
             namespacesError = nil
-            if !namespaces.contains(namespace) {
-                namespace = namespaces.contains("default") ? "default" : namespaces.first ?? ""
-            }
+            form.namespacesLoaded(namespaces)
         } catch {
             // No permission to list namespaces: free text entry.
             namespaces = []
@@ -246,41 +214,18 @@ struct ForwardForm: View {
     private func loadTargets(_ context: String, _ namespace: String) async {
         guard !context.isEmpty, !namespace.isEmpty else { return }
         do {
-            targets = try await model.targets(context: context, namespace: namespace)
+            form.targetsLoaded(try await model.targets(context: context, namespace: namespace))
             targetsError = nil
         } catch {
-            targets = []
+            form.targetsLoaded([])
             targetsError = L("form.targetsUnavailable", describe(error))
         }
-        pickDefaultTarget()
-    }
-
-    private func pickDefaultTarget() {
-        if !filteredTargets.contains(where: { $0.name == targetName }) {
-            targetName = filteredTargets.first?.name ?? (filteredTargets.isEmpty ? targetName : "")
-        }
-        pickDefaultPort()
-    }
-
-    private func pickDefaultPort() {
-        let ports = portOptions.map { String($0.port) }
-        if !ports.isEmpty, !ports.contains(remotePort) { remotePort = ports[0] }
-    }
-
-    /// Prefilled name `target:port` and local port = remote port, until edited.
-    private func autofill() {
-        if !nameEdited, !targetName.isEmpty { name = "\(targetName):\(remotePort)" }
-        if !localEdited { localPort = remotePort }
     }
 
     // MARK: Actions
 
     private func save() {
-        guard let remote = UInt16(remotePort), let local = UInt16(localPort) else { return }
-        let input = ForwardInput(
-            name: name, context: context, namespace: namespace, targetKind: kind,
-            targetName: targetName, remotePort: remote, localPort: local, idleTimeout: idleTimeout
-        )
+        guard let input = form.input else { return }
         let previous: String? = if case .edit(let f) = mode { f.name } else { nil }
         saving = true
         Task {

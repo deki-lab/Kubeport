@@ -16,6 +16,8 @@ let package = Package(
                 .linkedFramework("SystemConfiguration"),
             ]
         ),
+        // The app's logic without SwiftUI (FormState…): `swift test --package-path app`.
+        .testTarget(name: "KubeportTests", dependencies: ["Kubeport"]),
     ],
     // UniFFI-generated code is not yet annotated for Swift 6 strict concurrency.
     swiftLanguageModes: [.v5]

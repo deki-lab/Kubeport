@@ -98,7 +98,7 @@ struct SettingsView: View {
                     }
                 )) {
                     Text(L("idle.never")).tag(UInt32?.none)
-                    ForEach(idleChoices, id: \.self) { minutes in
+                    ForEach(idleChoices(including: defaultIdle), id: \.self) { minutes in
                         Text(idleDuration(minutes)).tag(UInt32?.some(minutes))
                     }
                 }

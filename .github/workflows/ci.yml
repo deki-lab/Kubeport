@@ -34,3 +34,4 @@ jobs:
         with:
           toolchain: stable
       - run: ./scripts/build-app.sh
+      - run: swift test --package-path app
