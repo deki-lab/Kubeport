@@ -252,10 +252,10 @@ mod tests {
     #[test]
     fn a_client_that_cannot_be_found_is_refused() {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
-        let (client, local, peer) = connection(&listener);
-        // Another connection's ports, swapped: no socket goes from `local` to `peer`.
-        assert!(!same_user(peer, local));
-        drop(client);
+        let (_client, local, _peer) = connection(&listener);
+        // A port held by a listener: no socket goes from it to `local`.
+        let idle = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        assert!(!same_user(local, idle.local_addr().unwrap()));
     }
 
     #[cfg(target_os = "linux")]
