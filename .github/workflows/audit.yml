@@ -4,12 +4,14 @@ name: Audit
 # Runs when Cargo.lock changes, and every day: an advisory can be published
 # without any change here. Fails on a vulnerability; an unmaintained crate is
 # only a warning. Ignored advisories, if ever needed, go in .cargo/audit.toml.
+# A PR can change this workflow or .cargo/audit.toml for its own run: the verdict
+# that counts is the run on main (push and daily); on a PR, check the diff of these.
 on:
   pull_request:
-    paths: [Cargo.lock, .github/workflows/audit.yml]
+    paths: [Cargo.lock, Cargo.toml, "**/Cargo.toml", ".cargo/**", .github/workflows/audit.yml]
   push:
     branches: [main]
-    paths: [Cargo.lock, .github/workflows/audit.yml]
+    paths: [Cargo.lock, Cargo.toml, "**/Cargo.toml", ".cargo/**", .github/workflows/audit.yml]
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
@@ -28,4 +30,5 @@ jobs:
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-audit@0.22.2
-      - run: cargo audit
+      # The binary itself, not `cargo audit`: a .cargo/config.toml alias cannot replace it.
+      - run: cargo-audit audit --file Cargo.lock
