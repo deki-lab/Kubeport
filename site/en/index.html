@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kubeport: Kubernetes port-forwards in your macOS menu bar</title>
+<meta name="description" content="Kubernetes port-forwards from the macOS menu bar. Set up a Forward once, turn it on with a switch. It follows the pods behind a Service through rollouts and turns itself off when idle.">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://deki-lab.github.io/Kubeport/en/">
+<link rel="alternate" hreflang="en" href="https://deki-lab.github.io/Kubeport/en/">
+<link rel="alternate" hreflang="fr" href="https://deki-lab.github.io/Kubeport/fr/">
+<link rel="alternate" hreflang="x-default" href="https://deki-lab.github.io/Kubeport/en/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:title" content="Kubeport: Kubernetes port-forwards in your macOS menu bar">
+<meta property="og:description" content="Set up a Forward once, turn it on with a switch. It follows the pods behind a Service through rollouts. Free and open source.">
+<meta property="og:image" content="https://deki-lab.github.io/Kubeport/assets/panel.png">
+<meta property="og:image:alt" content="The Kubeport panel with three Active Forwards">
+<meta property="og:url" content="https://deki-lab.github.io/Kubeport/en/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="../assets/AppIcon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="g-off" viewBox="0 0 27 16"><rect x="1.75" y="3.75" width="8.5" height="8.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.25 8H14.5" stroke="currentColor" stroke-width="1.5"/><polygon points="20.1,2 14.9,5 14.9,11 20.1,14 25.3,11 25.3,5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="g-on" viewBox="0 0 27 16"><rect x="1.75" y="3.75" width="8.5" height="8.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.25 8H14.5" stroke="currentColor" stroke-width="1.5"/><polygon points="20.1,1.25 14.25,4.63 14.25,11.38 20.1,14.75 25.95,11.38 25.95,4.63" fill="currentColor"/></symbol>
+</svg>
+
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-nav">
+  <div class="wrap">
+    <a class="brand" href="#main"><img src="../assets/AppIcon.svg" width="28" height="28" alt="">Kubeport</a>
+    <nav class="links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#security">Security</a>
+      <a href="https://github.com/deki-lab/Kubeport">GitHub</a>
+    </nav>
+    <div class="right">
+      <nav class="lang" aria-label="Language"><a href="../en/" data-alt="../en/" lang="en" hreflang="en" aria-label="English" title="English" aria-current="true"><svg class="flag" viewBox="0 0 60 40" width="24" height="16" aria-hidden="true" focusable="false"><rect width="60" height="40" fill="#012169"/><path d="M0 0 60 40M60 0 0 40" stroke="#fff" stroke-width="8"/><path d="M0 0 60 40M60 0 0 40" stroke="#C8102E" stroke-width="3"/><path d="M30 0v40M0 20h60" stroke="#fff" stroke-width="13"/><path d="M30 0v40M0 20h60" stroke="#C8102E" stroke-width="8"/></svg></a><a href="../fr/" data-alt="../fr/" lang="fr" hreflang="fr" aria-label="Français" title="Français"><svg class="flag" viewBox="0 0 60 40" width="24" height="16" aria-hidden="true" focusable="false"><rect width="20" height="40" fill="#0055A4"/><rect x="20" width="20" height="40" fill="#fff"/><rect x="40" width="20" height="40" fill="#EF4135"/></svg></a></nav>
+      <a class="button sm" href="https://github.com/deki-lab/Kubeport/releases/latest"><svg class="apple" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>Download</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<div class="desktop">
+  <div class="menubar">
+    <span class="app" aria-hidden="true"><b>Terminal</b><span>Shell</span><span>Edit</span><span>View</span></span>
+    <button class="open" id="mb-icon" type="button" aria-expanded="true" aria-controls="panel" aria-label="Kubeport" data-state="active">
+      <svg class="mb-icon" width="27" height="16" viewBox="0 0 27 16" aria-hidden="true"><rect x="1.75" y="3.75" width="8.5" height="8.5" rx="2" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M10.25 8H14.5" stroke="#fff" stroke-width="1.5"/><polygon class="ring" points="20.1,2 14.9,5 14.9,11 20.1,14 25.3,11 25.3,5" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><polygon class="fill" points="20.1,1.25 14.25,4.63 14.25,11.38 20.1,14.75 25.95,11.38 25.95,4.63" fill="#fff"/><circle class="dot" cx="24" cy="13" r="3" fill="#FF453A"/></svg>
+    </button>
+    <svg class="wifi" aria-hidden="true" width="17" height="13" viewBox="0 0 17 13"><path d="M8.5 12.2 6.4 9.9a3 3 0 0 1 4.2 0Zm-4-4.3a5.8 5.8 0 0 1 8 0l1.4-1.5a7.9 7.9 0 0 0-10.8 0Zm-2.8-3a9.9 9.9 0 0 1 13.6 0L16.7 3.4a12 12 0 0 0-16.4 0Z" fill="#F1F5F9"/></svg>
+    <span aria-hidden="true">Tue 11:44</span>
+  </div>
+  <div class="wrap hero">
+    <div>
+      <h1>Kubernetes <span class="keep">port-forwards</span> <span class="keep">in your menu bar.</span></h1>
+      <p class="lede">Set up a Forward once, then switch it on. Aim it at a Service and Kubeport follows the pods: after a rollout or a crash, the next connection to <code>localhost</code> reaches a Ready pod.</p>
+      <div class="actions">
+        <a class="button" href="https://github.com/deki-lab/Kubeport/releases/latest"><svg class="apple" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>Download for macOS</a>
+        <a href="#brew-box">Install with Homebrew</a>
+        <a href="https://github.com/deki-lab/Kubeport">Source on GitHub</a>
+      </div>
+      <ul class="checks">
+        <li>macOS 14 or later, Apple silicon and Intel</li>
+        <li>Free and open source (MIT license)</li>
+        <li>Not signed with a Developer ID: <a href="#first-launch">the first launch needs one extra step</a></li>
+      </ul>
+    </div>
+    <div class="panel-wrap" id="panelwrap">
+      <div class="panel" id="panel" role="group" aria-label="Kubeport panel, interactive demo">
+        <div class="screens" id="screens">
+        <div class="screen" id="screen-list">
+        <div class="hd"><span>Kubeport</span><button class="sw" id="master" type="button" role="switch" aria-checked="true" aria-label="All Forwards" title="Off: deactivate every Forward. On: bring back the ones that were Active."><span></span></button></div>
+        <hr>
+        <p class="stitle" id="active-title">docker-desktop · kubeport-demo</p>
+        <p class="stitle none" id="no-active" hidden>No Active Forwards</p>
+        <ul id="active-list">
+          <li class="row" data-id="web" data-active="true">
+            <div class="line">
+              <span class="chip" role="img" aria-label="Connected" data-s="connected"><svg class="g-on" aria-hidden="true"><use href="#g-on"/></svg><svg class="g-off" aria-hidden="true"><use href="#g-off"/></svg><svg class="g-sync" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8A5.2 5.2 0 0 1 4.6 11.6M2.8 8a5.2 5.2 0 0 1 8.6-3.6"/><path d="M4.4 14.2v-2.9h2.9M11.6 1.8v2.9H8.7"/></svg><svg class="g-err" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 2.5v6.5M8 13.2v.1"/></svg></span>
+              <span class="rname"><button class="rbtn" type="button" aria-expanded="false" aria-controls="d-web"><span class="n">web</span></button><span class="reason" hidden></span></span>
+              <span class="port">:13000</span>
+              <button class="sw sm nudge" type="button" role="switch" aria-checked="true" aria-label="Activate the Forward web"><span></span></button>
+            </div>
+            <div class="details" id="d-web" hidden>
+              <dl class="dgrid">
+                <dt>Target</dt><dd class="mono d-target">svc/web:80</dd>
+                <dt class="d-pod">Resolved pod</dt><dd class="d-pod mono d-pod-v">web-7d9f8b6c5-x2k4q</dd>
+                <dt>Address</dt><dd><span class="mono d-addr">localhost:13000</span> <button class="mini" type="button">Copy</button></dd>
+                <dt class="d-idle" hidden>Auto-deactivate</dt><dd class="d-idle d-idle-v" hidden></dd>
+              </dl>
+            </div>
+          </li>
+          <li class="row" data-id="orders-api" data-active="true">
+            <div class="line">
+              <span class="chip" role="img" aria-label="Connected" data-s="connected"><svg class="g-on" aria-hidden="true"><use href="#g-on"/></svg><svg class="g-off" aria-hidden="true"><use href="#g-off"/></svg><svg class="g-sync" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8A5.2 5.2 0 0 1 4.6 11.6M2.8 8a5.2 5.2 0 0 1 8.6-3.6"/><path d="M4.4 14.2v-2.9h2.9M11.6 1.8v2.9H8.7"/></svg><svg class="g-err" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 2.5v6.5M8 13.2v.1"/></svg></span>
+              <span class="rname"><button class="rbtn" type="button" aria-expanded="false" aria-controls="d-orders-api"><span class="n">orders-api</span></button><span class="reason" hidden></span></span>
+              <span class="port">:13080</span>
+              <button class="sw sm" type="button" role="switch" aria-checked="true" aria-label="Activate the Forward orders-api"><span></span></button>
+            </div>
+            <div class="details" id="d-orders-api" hidden>
+              <dl class="dgrid">
+                <dt>Target</dt><dd class="mono d-target">svc/orders-api:8080</dd>
+                <dt class="d-pod">Resolved pod</dt><dd class="d-pod mono d-pod-v">orders-api-5c8d6f4b7-m9p2z</dd>
+                <dt>Address</dt><dd><span class="mono d-addr">localhost:13080</span> <button class="mini" type="button">Copy</button></dd>
+                <dt class="d-idle" hidden>Auto-deactivate</dt><dd class="d-idle d-idle-v" hidden></dd>
+              </dl>
+            </div>
+          </li>
+          <li class="row" data-id="grafana" data-active="true">
+            <div class="line">
+              <span class="chip" role="img" aria-label="Connected" data-s="connected"><svg class="g-on" aria-hidden="true"><use href="#g-on"/></svg><svg class="g-off" aria-hidden="true"><use href="#g-off"/></svg><svg class="g-sync" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8A5.2 5.2 0 0 1 4.6 11.6M2.8 8a5.2 5.2 0 0 1 8.6-3.6"/><path d="M4.4 14.2v-2.9h2.9M11.6 1.8v2.9H8.7"/></svg><svg class="g-err" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 2.5v6.5M8 13.2v.1"/></svg></span>
+              <span class="rname"><button class="rbtn" type="button" aria-expanded="false" aria-controls="d-grafana"><span class="n">grafana</span></button><span class="reason" hidden></span></span>
+              <span class="port">:13300</span>
+              <button class="sw sm" type="button" role="switch" aria-checked="true" aria-label="Activate the Forward grafana"><span></span></button>
+            </div>
+            <div class="details" id="d-grafana" hidden>
+              <dl class="dgrid">
+                <dt>Target</dt><dd class="mono d-target">svc/grafana:3000</dd>
+                <dt class="d-pod">Resolved pod</dt><dd class="d-pod mono d-pod-v">grafana-6b7c9d5f8-t4w8n</dd>
+                <dt>Address</dt><dd><span class="mono d-addr">localhost:13300</span> <button class="mini" type="button">Copy</button></dd>
+                <dt class="d-idle" hidden>Auto-deactivate</dt><dd class="d-idle d-idle-v" hidden></dd>
+              </dl>
+            </div>
+          </li>
+        </ul>
+        <hr class="pad">
+        <button class="disc" id="disc" type="button" aria-expanded="false" aria-controls="inactive-box"><span class="t">Inactive Forwards</span><span class="count" id="inactive-count">2</span><svg class="chev" viewBox="0 0 7 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.2 1.2 5.6 5.5 1.2 9.8"/></svg></button>
+        <div id="inactive-box" hidden>
+          <p class="stitle small" id="inactive-title">docker-desktop · kubeport-demo</p>
+          <ul id="inactive-list">
+          <li class="row" data-id="postgres" data-active="false">
+            <div class="line">
+              <span class="chip" role="img" aria-label="Inactive" data-s="inactive"><svg class="g-on" aria-hidden="true"><use href="#g-on"/></svg><svg class="g-off" aria-hidden="true"><use href="#g-off"/></svg><svg class="g-sync" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8A5.2 5.2 0 0 1 4.6 11.6M2.8 8a5.2 5.2 0 0 1 8.6-3.6"/><path d="M4.4 14.2v-2.9h2.9M11.6 1.8v2.9H8.7"/></svg><svg class="g-err" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 2.5v6.5M8 13.2v.1"/></svg></span>
+              <span class="rname"><button class="rbtn" type="button" aria-expanded="false" aria-controls="d-postgres"><span class="n">postgres</span></button><span class="reason" hidden></span></span>
+              <span class="port">:15432</span>
+              <button class="sw sm" type="button" role="switch" aria-checked="false" aria-label="Activate the Forward postgres"><span></span></button>
+            </div>
+            <div class="details" id="d-postgres" hidden>
+              <dl class="dgrid">
+                <dt>Target</dt><dd class="mono d-target">svc/postgres:5432</dd>
+                <dt class="d-pod" hidden>Resolved pod</dt><dd class="d-pod mono d-pod-v" hidden>postgres-0</dd>
+                <dt>Address</dt><dd><span class="mono d-addr">localhost:15432</span> <button class="mini" type="button">Copy</button></dd>
+                <dt class="d-idle" hidden>Auto-deactivate</dt><dd class="d-idle d-idle-v" hidden></dd>
+              </dl>
+            </div>
+          </li>
+          <li class="row" data-id="billing" data-active="false" data-fails="1">
+            <div class="line">
+              <span class="chip" role="img" aria-label="Inactive" data-s="inactive"><svg class="g-on" aria-hidden="true"><use href="#g-on"/></svg><svg class="g-off" aria-hidden="true"><use href="#g-off"/></svg><svg class="g-sync" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8A5.2 5.2 0 0 1 4.6 11.6M2.8 8a5.2 5.2 0 0 1 8.6-3.6"/><path d="M4.4 14.2v-2.9h2.9M11.6 1.8v2.9H8.7"/></svg><svg class="g-err" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 2.5v6.5M8 13.2v.1"/></svg></span>
+              <span class="rname"><button class="rbtn" type="button" aria-expanded="false" aria-controls="d-billing"><span class="n">billing</span></button><span class="reason" hidden>Service kubeport-demo/billing not found</span></span>
+              <span class="port">:13400</span>
+              <button class="sw sm" type="button" role="switch" aria-checked="false" aria-label="Activate the Forward billing"><span></span></button>
+            </div>
+            <div class="details" id="d-billing" hidden>
+              <dl class="dgrid">
+                <dt>Target</dt><dd class="mono d-target">svc/billing:8080</dd>
+                <dt class="d-pod" hidden>Resolved pod</dt><dd class="d-pod mono d-pod-v" hidden>billing-5d7b9c6f4-h8j2k</dd>
+                <dt>Address</dt><dd><span class="mono d-addr">localhost:13400</span> <button class="mini" type="button">Copy</button></dd>
+                <dt class="d-idle" hidden>Auto-deactivate</dt><dd class="d-idle d-idle-v" hidden></dd>
+              </dl>
+            </div>
+          </li>
+          </ul>
+        </div>
+        <hr>
+        <button class="mi" id="new-forward" type="button">New Forward…</button>
+        <button class="mi" id="open-settings" type="button">Kubeport Settings…</button>
+        </div>
+        <div class="screen" id="screen-form" hidden>
+          <form id="nf" novalidate aria-label="New Forward">
+            <div class="hd back"><button class="backbtn" id="nf-back" type="button" aria-label="Forwards" title="Forwards"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 1.5 1.8 6.5l4.7 5"/></svg></button><span>New Forward</span></div>
+            <hr>
+            <p class="stitle">Target</p>
+            <div class="set"><label for="nf-context">Context</label><span class="sel"><select id="nf-context"><option>docker-desktop</option></select></span></div>
+            <div class="set"><label for="nf-namespace">Namespace</label><span class="sel"><select id="nf-namespace"><option>kubeport-demo</option></select></span></div>
+            <div class="set"><span id="nf-type-label">Type</span><span class="seg" role="radiogroup" aria-labelledby="nf-type-label"><label><input type="radio" name="kind" value="service" checked><span>Service</span></label><label><input type="radio" name="kind" value="pod"><span>Pod</span></label></span></div>
+            <div class="set"><label id="nf-target" for="nf-service"><span id="nf-target-label">Service</span></label><span class="sel" id="nf-service-w"><select id="nf-service"><option>checkout</option></select></span><span class="sel" id="nf-pod-w" hidden><select id="nf-pod"><option>checkout-6f7c9d8b5-x2k4q</option></select></span></div>
+            <div class="set"><label for="nf-remote">Remote port</label><span class="sel"><select id="nf-remote"><option>8080 (http)</option></select></span></div>
+            <hr class="pad">
+            <p class="stitle">On this Mac</p>
+            <div class="set"><label for="nf-local">Local port</label><input class="field sm" id="nf-local" inputmode="numeric" autocomplete="off" value="8080"></div>
+            <div class="set"><label for="nf-name">Name</label><input class="field" id="nf-name" autocomplete="off" spellcheck="false" value="checkout"></div>
+            <div class="set"><label for="nf-idle">Auto-deactivate</label><span class="sel"><select id="nf-idle"><option value="inherit">Default (1 h)</option><option value="never">Never</option><option value="15">15 min</option><option value="60">1 h</option><option value="240">4 h</option></select></span></div>
+            <p class="hintline" id="nf-error" role="alert"></p>
+            <hr class="pad">
+            <div class="foot"><button class="btn" id="nf-cancel" type="button">Cancel</button><button class="btn primary" id="nf-save" type="submit">Save</button></div>
+          </form>
+        </div>
+        <div class="screen" id="screen-settings" hidden>
+          <div class="hd back"><button class="backbtn" id="set-back" type="button" aria-label="Forwards" title="Forwards"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 1.5 1.8 6.5l4.7 5"/></svg></button><span>Settings</span></div>
+          <hr>
+          <p class="stitle">General</p>
+          <div class="set"><span id="set-login-l">Open Kubeport at login</span><button class="sw sm" id="set-login" type="button" role="switch" aria-checked="false" aria-labelledby="set-login-l"><span></span></button></div>
+          <div class="set"><label for="set-idle">Auto-deactivate by default</label><span class="sel"><select id="set-idle"><option value="never">Never</option><option value="15">15 min</option><option value="60" selected>1 h</option><option value="240">4 h</option></select></span></div>
+          <p class="hintline dim">An Active Forward with no open connection for this long becomes Inactive.</p>
+          <hr class="pad">
+          <p class="stitle">Kubeconfig</p>
+          <div class="set kc"><input class="field left" id="set-kc" autocomplete="off" spellcheck="false" aria-label="Kubeconfig" placeholder="Default: shell KUBECONFIG, then ~/.kube/config"><button class="btn" id="set-choose" type="button">Choose…</button><button class="btn" id="set-apply" type="button">Apply</button></div>
+          <p class="hintline dim">Leave empty: shell KUBECONFIG, then ~/.kube/config. Active Forwards are restarted.</p>
+          <hr class="pad">
+          <button class="mi" id="set-config" type="button">Open config</button>
+          <button class="mi" id="set-reload" type="button">Reload Config</button>
+          <hr>
+          <button class="mi" id="set-quit" type="button">Quit Kubeport</button>
+          <p class="ver">Kubeport 0.4.0</p>
+        </div>
+        </div>
+        <div aria-live="polite"><div class="notice" id="notice" hidden><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4M8 4.8v.1"/></svg><span id="notice-text"></span><button type="button" id="notice-x" aria-label="Dismiss"><svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M1 1l7 7M8 1 1 8"/></svg></button></div></div>
+      </div>
+      <div class="hint">
+        <svg class="arrow" viewBox="0 0 22 26" width="22" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 24V3M3.5 10.5 11 3l7.5 7.5"/></svg>
+        <p class="hint-main">Try it: flip a switch.</p>
+        <p class="hint-sub" id="hint-sub">Or add a Forward.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <section id="rollouts">
+    <div class="wrap">
+      <h2>A rollout no longer breaks your connection</h2>
+      <p class="intro"><code>kubectl port-forward svc/…</code> picks one pod and dies with it. Kubeport watches the Service: when that pod stops being Ready, new connections go to another Ready pod. Connections already open to the old pod close.</p>
+      <div class="lanes paused" id="lanes">
+        <figure class="lane" data-lane="kubectl">
+          <h3><code>kubectl port-forward svc/postgres 5432</code></h3>
+          <svg viewBox="0 0 520 170" role="img" aria-label="kubectl: the connection breaks when its pod is replaced">
+            <rect class="machine" x="20" y="60" width="50" height="50" rx="10"/>
+            <text class="label strong" x="20" y="140">localhost:5432</text>
+            <line class="link down hidden" data-el="link-a" x1="72" y1="80" x2="292" y2="45"/>
+            <line class="link up hidden" data-el="link-b" x1="72" y1="90" x2="292" y2="125"/>
+            <g class="packets" data-el="pk-a"><circle class="pk" cx="72" cy="80" r="4.5" style="--d:0s"/><circle class="pk" cx="72" cy="80" r="4.5" style="--d:0.45s"/><circle class="pk" cx="72" cy="80" r="4.5" style="--d:0.9s"/><circle class="pk" cx="72" cy="80" r="4.5" style="--d:1.35s"/></g>
+            <g class="packets" data-el="pk-b"><circle class="pk b" cx="72" cy="90" r="4.5" style="--d:0s"/><circle class="pk b" cx="72" cy="90" r="4.5" style="--d:0.45s"/><circle class="pk b" cx="72" cy="90" r="4.5" style="--d:0.9s"/><circle class="pk b" cx="72" cy="90" r="4.5" style="--d:1.35s"/></g>
+            <polygon class="pod dying gone" data-el="pod-a" points="320,15 346,30 346,60 320,75 294,60 294,30"/>
+            <polygon class="pod ready" data-el="pod-b" points="320,95 346,110 346,140 320,155 294,140 294,110"/>
+            <text class="label hidden" data-el="label-a" x="362" y="51">postgres-a</text>
+            <text class="label" data-el="label-b" x="362" y="131">postgres-b</text>
+          </svg>
+          <p class="status" data-el="status"><span class="tl">Forwarding from 127.0.0.1:5432 -&gt; 5432</span><span class="tl err">error: lost connection to pod</span><span class="sentence">Run the command again.</span></p>
+        </figure>
+        <figure class="lane" data-lane="kubeport">
+          <h3>Kubeport, a Forward on the Service postgres</h3>
+          <svg viewBox="0 0 520 170" role="img" aria-label="Kubeport: new connections move to the new pod">
+            <rect class="machine" x="20" y="60" width="50" height="50" rx="10"/>
+            <text class="label strong" x="20" y="140">localhost:5432</text>
+            <line class="link up hidden" data-el="link-a" x1="72" y1="80" x2="292" y2="45"/>
+            <line class="link up" data-el="link-b" x1="72" y1="90" x2="292" y2="125"/>
+            <g class="packets" data-el="pk-a"><circle class="pk" cx="72" cy="80" r="4.5" style="--d:0s"/><circle class="pk" cx="72" cy="80" r="4.5" style="--d:0.45s"/><circle class="pk" cx="72" cy="80" r="4.5" style="--d:0.9s"/><circle class="pk" cx="72" cy="80" r="4.5" style="--d:1.35s"/></g>
+            <g class="packets run late" data-el="pk-b"><circle class="pk b" cx="72" cy="90" r="4.5" style="--d:0s"/><circle class="pk b" cx="72" cy="90" r="4.5" style="--d:0.45s"/><circle class="pk b" cx="72" cy="90" r="4.5" style="--d:0.9s"/><circle class="pk b" cx="72" cy="90" r="4.5" style="--d:1.35s"/></g>
+            <polygon class="pod dying gone" data-el="pod-a" points="320,15 346,30 346,60 320,75 294,60 294,30"/>
+            <polygon class="pod ready" data-el="pod-b" points="320,95 346,110 346,140 320,155 294,140 294,110"/>
+            <text class="label hidden" data-el="label-a" x="362" y="51">postgres-a</text>
+            <text class="label" data-el="label-b" x="362" y="131">postgres-b</text>
+          </svg>
+          <p class="status" data-el="status"><strong>Connected</strong> to postgres-b on the same port. Nothing to restart.</p>
+        </figure>
+      </div>
+      <button class="replay" type="button" id="motion">Pause animation</button>
+    </div>
+  </section>
+
+  <section id="idle">
+    <div class="wrap idle-grid">
+      <div>
+        <h2>Forgotten Forwards turn themselves off</h2>
+        <p class="intro">On a new install, a Forward with no open connection for an hour becomes Inactive and gives its port back. A new connection resets the clock. Change the delay in Settings or for a single Forward, or choose Never.</p>
+      </div>
+      <div>
+        <figure class="lane" id="idle-card">
+          <h3>Auto-deactivate: 1 hour with no connection</h3>
+          <svg viewBox="0 0 520 170" role="img" aria-label="The clock runs down while no connection is open, resets when one arrives, and closes the tunnel at zero">
+            <rect class="machine" x="20" y="60" width="50" height="50" rx="10"/>
+            <text class="label strong" data-el="port" x="20" y="140">port 5432 free</text>
+            <line class="link hidden" data-el="link" x1="72" y1="85" x2="292" y2="85"/>
+            <g class="packets" data-el="pk"><circle class="pk i" cx="72" cy="85" r="4.5" style="--d:0s"/><circle class="pk i" cx="72" cy="85" r="4.5" style="--d:0.5s"/><circle class="pk i" cx="72" cy="85" r="4.5" style="--d:1.0s"/></g>
+            <polygon class="pod ready" points="320,55 346,70 346,100 320,115 294,100 294,70"/>
+            <text class="label" x="362" y="91">postgres-a</text>
+            <text class="label strong" data-el="clock" x="110" y="32">Inactive</text>
+            <rect class="bar-track" x="110" y="42" width="180" height="6" rx="3"/>
+            <rect class="bar-fill" data-el="bar" x="110" y="42" width="180" height="6" rx="3" style="--r:0"/>
+          </svg>
+          <p class="status" data-el="status"><strong>Inactive.</strong> The tunnel closes and port 5432 is free.</p>
+        </figure>
+        <button class="replay" type="button" id="motion-idle">Pause animation</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap features">
+      <div>
+        <h2>Pick from your cluster, then flip a switch</h2>
+        <p class="intro">Kubeport lives in the menu bar, in the style of the macOS Wi-Fi menu. No Dock icon, no window to manage.</p>
+        <button class="textlink" id="try-form" type="button">Try the New Forward form in the panel above</button>
+      </div>
+      <dl class="facts">
+        <div><dt>Guided setup</dt><dd>Pick the Context, namespace, Service or Pod and port from lists read from your cluster. Kubeport fills in the local port and the name.</dd></div>
+        <div><dt>One switch per Forward</dt><dd>Turn a Forward on or off from its row. The master switch turns every Forward off, then brings the same ones back. Forwards that were on when you quit come back at the next launch.</dd></div>
+      </dl>
+    </div>
+    <div class="wrap specs">
+      <h3>Specs</h3>
+      <dl class="facts">
+        <div><dt>Kubeconfig</dt><dd>Any kubeconfig, including <code>exec</code> auth plugins for EKS, GKE, AKS and kubelogin. No <code>kubectl</code> needed.</dd></div>
+        <div><dt>Languages</dt><dd>English and French.</dd></div>
+        <div><dt>Appearance</dt><dd>Light and dark, following macOS.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="memory">
+    <div class="wrap">
+      <h2>Five Forwards in 17 MB</h2>
+      <p class="intro">Five Active Forwards in Kubeport take 17 MB. Five <code>kubectl port-forward</code> processes, one per Service, take 115 MB.</p>
+      <div class="bars" id="bars">
+        <div class="bar-row">
+          <p class="bar-head"><span>Kubeport 0.4.0, 5 Active Forwards</span><b>17 MB</b></p>
+          <div class="track" aria-hidden="true"><div class="fill a" style="--v:17"></div></div>
+        </div>
+        <div class="bar-row">
+          <p class="bar-head"><span>5 × <code>kubectl port-forward</code>, one per Service <span class="dim">(22 to 24 MB each)</span></span><b>115 MB</b></p>
+          <div class="track" aria-hidden="true"><div class="fill b" style="--v:115"></div></div>
+        </div>
+      </div>
+      <p class="fine">Physical memory footprint (macOS <code>footprint</code>, phys_footprint), at rest, after one HTTP request through each Forward. Three readings 5 s apart, identical. Five Services on a local docker-desktop cluster, kubectl v1.36.1, macOS 27.2, Apple M4 Pro, November 2026.</p>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>Install</h2>
+      <div class="steps">
+        <div>
+          <h3>With Homebrew</h3>
+          <div class="install" id="brew-box">
+            <div class="bar"><span>Terminal</span><button class="copy" type="button" data-copy="brew" aria-label="Copy the Homebrew commands">Copy</button></div>
+<pre id="brew" tabindex="0" aria-label="Homebrew commands">brew tap deki-lab/tap
+brew trust deki-lab/tap
+brew install --cask deki-lab/tap/kubeport</pre>
+          </div>
+          <p class="note"><code>brew trust</code> is there because Homebrew 7 and later asks you to trust third-party taps.</p>
+          <h3 class="again">Or download the app</h3>
+          <p>Download the <code>.dmg</code> from the <a href="https://github.com/deki-lab/Kubeport/releases/latest">latest release</a> and drag Kubeport to Applications. Kubeport needs macOS 14 or later, on an Apple silicon or Intel Mac.</p>
+        </div>
+        <div id="first-launch">
+          <h3>First launch</h3>
+          <p>Kubeport is not signed with an Apple Developer ID yet, so macOS blocks it the first time.</p>
+          <ol>
+            <li>Open Kubeport once, then close the alert.</li>
+            <li>Go to <b>System Settings › Privacy &amp; Security</b>.</li>
+            <li>Click <b>Open Anyway</b> next to Kubeport, then confirm.</li>
+          </ol>
+          <p>Or remove the download mark from the Terminal, before you open Kubeport the first time:</p>
+          <div class="install">
+            <div class="bar"><span>Terminal</span><button class="copy" type="button" data-copy="xattr" aria-label="Copy the Terminal command">Copy</button></div>
+<pre id="xattr" tabindex="0" aria-label="Terminal command">xattr -dr com.apple.quarantine /Applications/Kubeport.app</pre>
+          </div>
+          <p class="note">Run it only on a Kubeport installed from the releases page or the Homebrew tap.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="security" class="security">
+    <div class="wrap">
+      <h2>Only your account can use a forwarded port</h2>
+      <p class="intro">Kubeport opens the same kind of tunnel as <code>kubectl port-forward</code>, with the same limits.</p>
+      <dl class="facts">
+        <div><dt>Only your account</dt><dd>The local port checks who connects. Connections from another account or from root are closed at once.</dd></div>
+        <div><dt>Loopback only</dt><dd>Forwards listen on 127.0.0.1, and on ::1 when your Mac has IPv6. An Active Forward keeps its port until you turn it off, even while it reconnects, so no other process can take it.</dd></div>
+        <div><dt>No leaked secrets</dt><dd>When a kubeconfig auth plugin fails, Kubeport shows its exit status only, never its arguments, environment or output.</dd></div>
+      </dl>
+      <p class="note">As with <code>kubectl port-forward</code>, a web page open in your browser can reach forwarded <code>localhost</code> ports through DNS rebinding. <a href="https://github.com/deki-lab/Kubeport#security">Read the security notes</a> to see how to guard a forwarded HTTP service.</p>
+    </div>
+  </section>
+  <section id="support">
+    <div class="wrap">
+      <h2>Kubeport is free. Here is how to help.</h2>
+      <p class="intro">If Kubeport saves you a few <code>kubectl port-forward</code> restarts, you can help it grow.</p>
+      <dl class="facts">
+        <div><dt><a href="https://www.buymeacoffee.com/lideke">Buy me a coffee</a></dt><dd>A small tip says thanks and keeps the project going.</dd></div>
+        <div><dt><a href="https://github.com/deki-lab/Kubeport/issues">Report a bug or an idea</a></dt><dd>Open an issue on GitHub. Bugs and ideas are both welcome.</dd></div>
+        <div><dt><a href="https://github.com/deki-lab/Kubeport">Star or contribute on GitHub</a></dt><dd>The code is MIT-licensed. <a href="https://github.com/deki-lab/Kubeport/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> covers building from source, tests and conventions.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="cta" aria-labelledby="cta-h">
+    <div class="wrap cta-in">
+      <h2 id="cta-h">Stop restarting port-forwards.</h2>
+      <div class="cta-actions">
+        <a class="button" href="https://github.com/deki-lab/Kubeport/releases/latest"><svg class="apple" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>Download for macOS</a>
+        <a href="#brew-box">Or install with Homebrew</a>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>
+  <div class="wrap foot">
+    <div class="foot-brand">
+      <span class="brand"><img src="../assets/AppIcon.svg" width="28" height="28" alt="">Kubeport</span>
+      <p>Kubernetes port-forwards from the macOS menu bar. Free and open source under the MIT license.</p>
+    </div>
+    <nav class="foot-links" aria-label="Project">
+      <a href="https://github.com/deki-lab/Kubeport/releases">Releases and changelog</a>
+      <a href="https://github.com/deki-lab/Kubeport/issues">Report a bug</a>
+      <a href="https://github.com/deki-lab/Kubeport#security">Security notes</a>
+      <a href="https://github.com/deki-lab/Kubeport/blob/main/LICENSE">MIT license</a>
+      <a href="https://github.com/deki-lab/Kubeport">GitHub</a>
+      <a href="https://www.buymeacoffee.com/lideke">Buy me a coffee</a>
+    </nav>
+    <nav class="lang full" aria-label="Language"><span aria-current="true" lang="en">English</span><a href="../fr/" data-alt="../fr/" lang="fr" hreflang="fr">Français</a></nav>
+  </div>
+</footer>
+
+<p class="sr" id="copy-status" role="status"></p>
+<p class="sr" id="panel-status" role="status"></p>
+
+<script type="application/json" id="i18n">
+{
+  "copied": "Copied",
+  "copyFailed": "Press ⌘C to copy",
+  "stateConnected": "Connected",
+  "stateReconnecting": "Reconnecting",
+  "stateError": "Error",
+  "stateInactive": "Inactive",
+  "icon": "Kubeport",
+  "iconError": "Kubeport: error",
+  "iconQuit": "Kubeport is quit. Click to open it again.",
+  "reasonBilling": "Service kubeport-demo/billing not found",
+  "sayConnected": "{0}: Connected.",
+  "sayError": "{0}: Error. {1}.",
+  "sayOff": "{0}: turned off.",
+  "sayAllOff": "All Forwards turned off.",
+  "sayAllOn": "Forwards turned back on.",
+  "sayAdded": "{0}: added and turned on.",
+  "rowSwitch": "Activate the Forward {0}",
+  "dupName": "A Forward named “{0}” already exists.",
+  "noticeRival": "{0} deactivated: local port shared with {1}",
+  "noticeApplied": "Kubeconfig applied",
+  "noticeDemo": "Not available in this demo.",
+  "service": "Service",
+  "pod": "Pod",
+  "inherit": "Default ({0})",
+  "pause": "Pause animation",
+  "play": "Play animation",
+  "rStart": "<strong>Connected</strong> to postgres-a.",
+  "rRollout": "Rollout: postgres-a is replaced by postgres-b.",
+  "rWait": "<strong>postgres-a is not Ready.</strong> Its open connections close. Waiting for a Ready pod.",
+  "rOk": "<strong>Connected</strong> to postgres-b on the same port. Nothing to restart.",
+  "rAgain": "Run the command again.",
+  "reasonNoPod": "no Ready pod",
+  "noticeIdle": "{0} deactivated after {1} with no connection",
+  "idleCountdown": "Inactive in {0}",
+  "durMin": "{0} min",
+  "durHour": "{0} h",
+  "hintDemo": "Demo playing. Click to take over.",
+  "hintMine": "Or add a Forward.",
+  "sayCopied": "Address copied.",
+  "iNoConn": "No connection. The clock runs down.",
+  "iConn": "<strong>A connection opens.</strong> The clock resets and waits for it to close.",
+  "iNoConn2": "The connection closed. The clock starts again.",
+  "iClosed": "<strong>Inactive.</strong> The tunnel closes and port 5432 is free.",
+  "portUse": "localhost:5432",
+  "portFree": "port 5432 free"
+}
+</script>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>
