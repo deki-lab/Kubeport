@@ -216,6 +216,8 @@ private struct ForwardRow: View {
 }
 
 /// Round chip: colour and glyph give the Actual state (shape, not colour alone).
+/// Connected or Inactive: the app's machine-and-pod drawing (filled pod when Active);
+/// Reconnecting and Error keep a symbol that names the state.
 private struct StateChip: View {
     let forward: ForwardView
 
@@ -223,9 +225,16 @@ private struct StateChip: View {
         let size: CGFloat = forward.active ? 28 : 24
         ZStack {
             Circle().fill(fill)
-            Image(systemName: glyph)
-                .font(.system(size: size * 0.45, weight: .semibold))
-                .foregroundStyle(forward.active ? Color.white : Color.primary)
+            Group {
+                if let symbol {
+                    Image(systemName: symbol)
+                        .font(.system(size: size * 0.45, weight: .semibold))
+                } else {
+                    Image(nsImage: StatusIcon.glyph(filled: forward.active, width: size * 0.68))
+                        .renderingMode(.template)
+                }
+            }
+            .foregroundStyle(forward.active ? Color.white : Color.primary)
         }
         .frame(width: size, height: size)
         .accessibilityElement()
@@ -241,11 +250,11 @@ private struct StateChip: View {
         }
     }
 
-    private var glyph: String {
+    private var symbol: String? {
         switch forward.active ? forward.state : nil {
         case .error?: "exclamationmark"
         case .reconnecting?: "arrow.triangle.2.circlepath"
-        default: "arrow.left.arrow.right"
+        default: nil
         }
     }
 
@@ -377,8 +386,9 @@ private struct EmptyState: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: "arrow.left.arrow.right.circle")
-                .font(.system(size: 28)).foregroundStyle(.secondary)
+            Image(nsImage: StatusIcon.glyph(filled: false, width: 44))
+                .renderingMode(.template)
+                .foregroundStyle(.secondary)
             Text(L("empty.title")).font(.headline)
             Text(L("empty.body")).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Button(L("empty.create"), action: create).buttonStyle(.borderedProminent)
