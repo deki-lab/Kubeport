@@ -46,10 +46,11 @@ jobs:
           files="$(git diff --name-only "$BASE...$HEAD")"
           printf '%s\n' "$files"
           affects() { printf '%s\n' "$files" | grep -Eq "$1" && echo true || echo false; }
-          # Workflow files are not in the list: a CI-only change runs neither job.
-          shared='^(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?|\.cargo/)'
+          # This workflow is in the list, so a change to it runs the jobs it tests.
+          shared='^(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?|\.cargo/|\.github/workflows/ci\.yml$)'
           echo "rust=$(affects "$shared|^(core|cli|ffi)/")" >> "$GITHUB_OUTPUT"
-          echo "app=$(affects "$shared|^(core|ffi|app|scripts)/|^version\.txt$")" >> "$GITHUB_OUTPUT"
+          # version.txt only names the release DMG: a release PR builds nothing.
+          echo "app=$(affects "$shared|^(core|ffi|app|scripts)/")" >> "$GITHUB_OUTPUT"
 
   rust:
     needs: changes
@@ -64,6 +65,10 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+      # Compiled dependencies; saved from main only, restored everywhere.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all
@@ -79,5 +84,33 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
+      # Compiled dependencies; saved from main only, restored everywhere.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # x86_64 is built and tested natively by app-intel; the release builds both.
       - run: ./scripts/build-app.sh
+        env:
+          ARCHS: arm64
+      - run: swift test --package-path app
+
+  # The release DMG is universal: run the core and the app tests natively on Intel,
+  # which executes the x86_64 slice (Swift tests call the Rust core through the FFI).
+  app-intel:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      # Compiled dependencies; saved from main only, restored everywhere.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --all
+      - run: ARCHS=x86_64 ./scripts/build-ffi.sh
       - run: swift test --package-path app

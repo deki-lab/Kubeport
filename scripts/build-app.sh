@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds dist/Kubeport.app, then dist/Kubeport-<version>.dmg: one universal app,
 # for Apple silicon and Intel Macs.
+# ARCHS: the architectures to build (default: "arm64 x86_64"; CI builds arm64 only).
 # Ad hoc signing only (no Apple Developer account for now).
 set -euo pipefail
 
@@ -14,8 +15,10 @@ rm -rf "$DIST"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 python3 -I "$ROOT/scripts/check-l10n.py"
-ARCHS="arm64 x86_64" "$ROOT/scripts/build-ffi.sh" >/dev/null
-SWIFT_BUILD=(swift build -c release --arch arm64 --arch x86_64 --package-path "$ROOT/app")
+export ARCHS="${ARCHS:-arm64 x86_64}"
+"$ROOT/scripts/build-ffi.sh" >/dev/null
+SWIFT_BUILD=(swift build -c release --package-path "$ROOT/app")
+for arch in $ARCHS; do SWIFT_BUILD+=(--arch "$arch"); done
 "${SWIFT_BUILD[@]}"
 BIN_DIR="$("${SWIFT_BUILD[@]}" --show-bin-path)"
 
