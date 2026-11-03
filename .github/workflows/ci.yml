@@ -46,8 +46,8 @@ jobs:
           files="$(git diff --name-only "$BASE...$HEAD")"
           printf '%s\n' "$files"
           affects() { printf '%s\n' "$files" | grep -Eq "$1" && echo true || echo false; }
-          # Workflow files are not in the list: a CI-only change runs neither job.
-          shared='^(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?|\.cargo/)'
+          # This workflow is in the list, so a change to it runs the jobs it tests.
+          shared='^(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?|\.cargo/|\.github/workflows/ci\.yml$)'
           echo "rust=$(affects "$shared|^(core|cli|ffi)/")" >> "$GITHUB_OUTPUT"
           echo "app=$(affects "$shared|^(core|ffi|app|scripts)/|^version\.txt$")" >> "$GITHUB_OUTPUT"
 
@@ -80,4 +80,21 @@ jobs:
         with:
           toolchain: stable
       - run: ./scripts/build-app.sh
+      - run: swift test --package-path app
+
+  # The release DMG is universal: run the core and the app tests natively on Intel,
+  # which executes the x86_64 slice (Swift tests call the Rust core through the FFI).
+  app-intel:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo test --all
+      - run: ARCHS=x86_64 ./scripts/build-ffi.sh
       - run: swift test --package-path app
