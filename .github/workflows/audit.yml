@@ -1,0 +1,31 @@
+name: Audit
+
+# Known vulnerabilities in the Rust dependencies (RustSec advisory database).
+# Runs when Cargo.lock changes, and every day: an advisory can be published
+# without any change here. Fails on a vulnerability; an unmaintained crate is
+# only a warning. Ignored advisories, if ever needed, go in .cargo/audit.toml.
+on:
+  pull_request:
+    paths: [Cargo.lock, .github/workflows/audit.yml]
+  push:
+    branches: [main]
+    paths: [Cargo.lock, .github/workflows/audit.yml]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Prebuilt binary, checksum verified by the action.
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-audit@0.22.2
+      - run: cargo audit
