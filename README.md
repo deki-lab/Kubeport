@@ -32,6 +32,8 @@ Set up a Forward once, turn it on with a switch, and forget about it: Kubeport f
 ## Install
 
 ```sh
+brew tap deki-lab/tap
+brew trust deki-lab/tap   # Homebrew 7+: third-party taps must be trusted
 brew install --cask deki-lab/tap/kubeport
 ```
 
