@@ -4,8 +4,8 @@ import AppKit
 /// Outline hexagon: no Active Forward. Filled hexagon: at least one Active.
 /// Filled with a red dot: at least one Forward in Error.
 enum StatusIcon {
-    private static let idle = template(filled: false)
-    private static let active = template(filled: true)
+    private static let idle = glyph(filled: false)
+    private static let active = glyph(filled: true)
     private static let error = withRedDot(active)
 
     static func image(for state: GlobalState) -> NSImage {
@@ -19,8 +19,14 @@ enum StatusIcon {
     private static let size = NSSize(width: 27, height: 16)
     private static let lineWidth: CGFloat = 1.5
 
-    private static func template(filled: Bool) -> NSImage {
-        let image = NSImage(size: size, flipped: false) { _ in
+    /// The drawing alone, as a template image `width` points wide: also used in the panel
+    /// (Forward chips, empty list). Drawn at that size, so it stays sharp.
+    static func glyph(filled: Bool, width: CGFloat = 27) -> NSImage {
+        let scale = width / size.width
+        let image = NSImage(size: NSSize(width: width, height: size.height * scale), flipped: false) { _ in
+            let transform = NSAffineTransform()
+            transform.scale(by: scale)
+            transform.concat()
             draw(filled: filled)
             return true
         }
