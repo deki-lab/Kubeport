@@ -1,0 +1,11 @@
+# Code owners for Kubeport.
+# Every pull request to main needs a review from a code owner (see the
+# "main" ruleset). Later rules override earlier ones.
+
+# Default owner for the whole repository.
+*                       @lideke
+
+# Files that control CI, releases and repository governance.
+/.github/               @lideke
+/release-please-config.json @lideke
+/.release-please-manifest.json @lideke
